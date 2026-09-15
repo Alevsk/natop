@@ -1,24 +1,35 @@
-# nats-tui
+# natop
 
 A small, keyboard-driven NATS JetStream dashboard. One Go binary shows live
 streams and consumer backlogs across multiple deployments, with filtering,
 sorting, drill-down, and connection status.
 
 ```text
- nats-tui  LIVE                       2/2 online  0 issues
+ natop  LIVE                       2/2 online  0 issues
  1 Streams   2 Consumers   3 Connections
  all connections · 3 rows · sort: messages ↓
  ┌ Streams ─────────────────────────────────────────────────────────┐
  │ CONNECTION  STREAM           STORAGE  CONSUMERS  MESSAGES  ...   │
- │ respondent  RESPONDENT_WORK   File           12       162        │
- │ respondent  QUERY_EVENTS      File            1        42        │
- │ reelify     AUDIT_EVENTS      File            1         0        │
+ │ production  ORDERS            File            5      1200        │
+ │ CONNECTION  STREAM           STORAGE  CONSUMERS  MESSAGES  ...   │
  └─────────────────────────────────────────────────────────────────┘
  Enter open  d details  / filter  c connection  s sort  r refresh
 ```
 
-## Start here
+## Installation
 
+### Homebrew (macOS/Linux)
+```sh
+brew install alevsk/tap/natop
+```
+
+### Go Install
+If you have Go 1.26+ installed:
+```sh
+go install github.com/alevsk/natop@latest
+```
+
+## Quick Start
 Build with **Go 1.26+** and Make. A recent Go installation can download the
 required toolchain automatically. The executable needs no Go installation,
 NATS CLI, database, or Docker at runtime.
@@ -26,7 +37,7 @@ NATS CLI, database, or Docker at runtime.
 ```sh
 make demo                                   # Try the UI with sample data
 make run SERVER=nats://localhost:4222        # Connect to your NATS server
-make run CONFIG=examples/connections.json    # Open both named deployments
+make run CONFIG=examples/connections.yaml    # Open both named deployments
 make help                                   # List all targets
 ```
 
@@ -35,70 +46,15 @@ The demo is clearly labeled and never connects to a server. Quit with `q`.
 Build a binary to copy to another machine:
 
 ```sh
-make build                                  # bin/nats-tui for this machine
-make build-linux ARCH=amd64                  # bin/nats-tui-linux-amd64
-make build-linux ARCH=arm64                  # bin/nats-tui-linux-arm64
+make build                                  # bin/natop for this machine
+make build-linux ARCH=amd64                  # bin/natop-linux-amd64
+make build-linux ARCH=arm64                  # bin/natop-linux-arm64
 make build VERSION=0.1.0
-./bin/nats-tui --version
+./bin/natop --version
 ```
 
 The release builds disable CGO and strip debug information. The NATS server
 dependency in `go.mod` is used by tests; it is not embedded in the application.
-
-## Your Reelify and Respondent networks
-
-The included config uses the addresses from your reports:
-
-| Connection | NATS address | Existing Docker network |
-| --- | --- | --- |
-| reelify | `nats://reelify-nats:4222` | `reelify-data` |
-| respondent | `nats://respondent-platform-nats-1:4222` | `respondent-platform_respondent-data` |
-
-On the Docker host where these services run:
-
-```sh
-make docker-multi
-```
-
-This builds the image and starts one interactive container attached to **both**
-existing networks. It mounts `examples/connections.json` read-only. `q` exits
-and removes the TUI container. It does not create or modify your NATS services.
-
-For a single network:
-
-```sh
-make docker-run NETWORK=reelify-data SERVER=nats://reelify-nats:4222
-
-make docker-run \
-  NETWORK=respondent-platform_respondent-data \
-  SERVER=nats://respondent-platform-nats-1:4222
-```
-
-Other Docker commands:
-
-```sh
-make docker-build                           # nats-tui:local
-make docker-demo                            # No NATS/network setup needed
-make docker-multi MULTI_CONFIG=/absolute/path/connections.json
-make docker-multi REELIFY_NETWORK=my-first-network RESPONDENT_NETWORK=my-second-network
-make docker-run NETWORK=my-network CONFIG=connections.local.json
-```
-
-`IMAGE=...` changes the image tag; `ARGS='--refresh 5s'` passes app flags.
-`DOCKER_ARGS='...'` passes options to `docker run` or `docker compose run`.
-After the first build, rebuilding uses Docker's cache. You can also run
-`docker compose run --rm nats-tui` directly to reuse an existing image.
-
-Docker service names resolve inside their networks. Running the native binary
-on your laptop or host requires reachable hostnames/published ports or an
-existing tunnel. A network or DNS error stays visible in the connections view;
-other deployments keep updating. Verify names on the actual Docker host:
-
-```sh
-docker network ls
-docker network inspect reelify-data
-docker network inspect respondent-platform_respondent-data
-```
 
 ## Navigation
 
@@ -125,19 +81,15 @@ when you opened them; close and reopen to see updated details.
 
 ## Configuration
 
-```json
-{
-  "refresh": "2s",
-  "connections": [
-    { "name": "local", "url": "nats://localhost:4222" },
-    {
-      "name": "production",
-      "url": "tls://nats.example.com:4222",
-      "credentials": "${NATS_CREDS}",
-      "tls_ca": "certs/ca.pem"
-    }
-  ]
-}
+```yaml
+refresh: 2s
+connections:
+  - name: local
+    url: nats://localhost:4222
+  - name: production
+    url: tls://nats.example.com:4222
+    credentials: ${NATS_CREDS}
+    tls_ca: certs/ca.pem
 ```
 
 Connection names must be unique. Each entry represents a separate account or
@@ -149,7 +101,7 @@ Configuration precedence:
 
 1. `--server` / `-s` selects an ad hoc connection and overrides config files.
 2. `--config FILE` loads an explicit JSON file; a missing file is an error.
-3. Otherwise load `nats-tui/config.json` below Go's user config directory:
+3. Otherwise load `natop/config.yaml` below Go's user config directory:
    `$XDG_CONFIG_HOME` or `~/.config` on Linux, `~/Library/Application Support`
    on macOS.
 4. If no default file exists, use `NATS_URL`, then `nats://localhost:4222`.
@@ -179,14 +131,14 @@ variables with `DOCKER_ARGS`. For example, with `"token": "${NATS_TOKEN}"`:
 
 ```sh
 export NATS_TOKEN='your-token'
-make docker-multi MULTI_CONFIG=/path/to/connections.json DOCKER_ARGS='-e NATS_TOKEN'
+make docker-multi MULTI_CONFIG=/path/to/connections.yaml DOCKER_ARGS='-e NATS_TOKEN'
 ```
 
 The image runs as UID/GID `65532`. If your mounted config or credentials are
 readable only by your own user, run the container as that user:
 
 ```sh
-make docker-multi MULTI_CONFIG=/path/to/connections.json \
+make docker-multi MULTI_CONFIG=/path/to/connections.yaml \
   DOCKER_ARGS="--user $(id -u):$(id -g) -v /path/to/account.creds:/config/account.creds:ro"
 ```
 

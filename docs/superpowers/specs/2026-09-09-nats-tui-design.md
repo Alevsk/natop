@@ -1,4 +1,4 @@
-# nats-tui: first-version design
+# natop: first-version design
 
 Status: implemented, including Makefile build/run/Docker targets.
 
@@ -61,9 +61,9 @@ current consumer statistic, not a calculated lifetime rate.
 
 ## Connections and configuration
 
-Support `nats-tui -s nats://localhost:4222` for a single connection and
-`nats-tui --config connections.json` for named connections. The normal config
-location is `nats-tui/config.json` beneath Go's `os.UserConfigDir()` directory.
+Support `natop -s nats://localhost:4222` for a single connection and
+`natop --config connections.yaml` for named connections. The normal config
+location is `natop/config.yaml` beneath Go's `os.UserConfigDir()` directory.
 An explicit server flag selects an ad hoc connection. If no file or server flag
 is supplied, use `NATS_URL`, falling back to `nats://localhost:4222`.
 

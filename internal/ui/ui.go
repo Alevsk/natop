@@ -11,7 +11,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/alevsk/nats-tui/internal/monitor"
+	"github.com/alevsk/natop/internal/monitor"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )

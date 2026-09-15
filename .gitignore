@@ -1,7 +1,8 @@
 /bin/
-/config.json
-/connections.local.json
+/config.yaml
+/connections.local.yaml
 *.creds
 *.key
 .env
 .DS_Store
+/local/

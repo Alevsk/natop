@@ -19,7 +19,7 @@ func isolatedConfig(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return filepath.Join(dir, "nats-tui", "config.json")
+	return filepath.Join(dir, "natop", "config.yaml")
 }
 
 func writeConfig(t *testing.T, path, contents string) {
@@ -46,22 +46,22 @@ func TestLoadPrecedence(t *testing.T) {
 	if err != nil || got.Connections[0].URL != "nats://environment:4222" {
 		t.Fatalf("environment fallback: %+v, %v", got, err)
 	}
-	writeConfig(t, defaultPath, `{"refresh":"3s","connections":[{"name":"file","url":"nats://file:4222"}]}`)
+	writeConfig(t, defaultPath, "refresh: 3s\nconnections:\n  - name: file\n    url: nats://file:4222")
 	got, err = Load("", "", "")
 	if err != nil || got.Refresh != 3*time.Second || got.Connections[0].Name != "file" {
 		t.Fatalf("default config: %+v, %v", got, err)
 	}
-	explicitPath := filepath.Join(t.TempDir(), "explicit.json")
-	writeConfig(t, explicitPath, `{"refresh":"4s","connections":[{"name":"explicit","url":"tls://explicit:4222"}]}`)
+	explicitPath := filepath.Join(t.TempDir(), "explicit.yaml")
+	writeConfig(t, explicitPath, "refresh: 4s\nconnections:\n  - name: explicit\n    url: tls://explicit:4222")
 	got, err = Load(explicitPath, "", "500ms")
 	if err != nil || got.Refresh != 500*time.Millisecond || got.Connections[0].Name != "explicit" {
 		t.Fatalf("explicit config and refresh: %+v, %v", got, err)
 	}
-	got, err = Load(filepath.Join(t.TempDir(), "missing.json"), "nats://flag:4222", "1s")
+	got, err = Load(filepath.Join(t.TempDir(), "missing.yaml"), "nats://flag:4222", "1s")
 	if err != nil || got.Refresh != time.Second || got.Connections[0].URL != "nats://flag:4222" {
 		t.Fatalf("server flag must override the entire file: %+v, %v", got, err)
 	}
-	if _, err := Load(filepath.Join(t.TempDir(), "missing.json"), "", ""); err == nil {
+	if _, err := Load(filepath.Join(t.TempDir(), "missing.yaml"), "", ""); err == nil {
 		t.Fatal("missing explicit config accepted")
 	}
 }
@@ -69,18 +69,18 @@ func TestLoadPrecedence(t *testing.T) {
 func TestLoadRejectsInvalidConfig(t *testing.T) {
 	isolatedConfig(t)
 	for _, tc := range []struct{ name, input string }{
-		{"empty connections", `{"connections":[]}`},
-		{"missing connections", `{}`},
-		{"null", `null`},
-		{"unknown top level field", `{"connections":[{"name":"a","url":"nats://a"}],"extra":true}`},
-		{"unknown connection field", `{"connections":[{"name":"a","url":"nats://a","extra":true}]}`},
-		{"trailing JSON", `{"connections":[{"name":"a","url":"nats://a"}]} {}`},
-		{"duplicate name", `{"connections":[{"name":"a","url":"nats://a"},{"name":"a","url":"nats://b"}]}`},
-		{"empty name", `{"connections":[{"name":" ","url":"nats://a"}]}`},
-		{"invalid refresh", `{"refresh":"never","connections":[{"name":"a","url":"nats://a"}]}`},
+		{"empty connections", "connections: []"},
+		{"missing connections", ""},
+		{"null", "null"},
+		{"unknown top level field", "extra: true\nconnections:\n  - name: a\n    url: nats://a"},
+		{"unknown connection field", "connections:\n  - name: a\n    url: nats://a\n    extra: true"},
+		{"trailing YAML", "connections:\n  - name: a\n    url: nats://a\n---"},
+		{"duplicate name", "connections:\n  - name: a\n    url: nats://a\n  - name: a\n    url: nats://b"},
+		{"empty name", "connections:\n  - name: \" \"\n    url: nats://a"},
+		{"invalid refresh", "refresh: never\nconnections:\n  - name: a\n    url: nats://a"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "config.json")
+			path := filepath.Join(t.TempDir(), "config.yaml")
 			writeConfig(t, path, tc.input)
 			if _, err := Load(path, "", ""); err == nil {
 				t.Fatal("invalid config accepted")
@@ -143,8 +143,8 @@ func TestLoadExpandsEnvironmentAndResolvesPaths(t *testing.T) {
 	t.Setenv("CONFIG_TEST_URL", "tls://server:4222")
 	t.Setenv("CONFIG_TEST_CREDS", "secrets/user.creds")
 	t.Setenv("CONFIG_TEST_CERT", "client.pem")
-	path := filepath.Join(t.TempDir(), "config.json")
-	writeConfig(t, path, `{"connections":[{"name":"a","url":"${CONFIG_TEST_URL}","credentials":"${CONFIG_TEST_CREDS}","tls_ca":"~/ca.pem","tls_cert":"${CONFIG_TEST_CERT}","tls_key":"client.key"}]}`)
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	writeConfig(t, path, "connections:\n  - name: a\n    url: ${CONFIG_TEST_URL}\n    credentials: ${CONFIG_TEST_CREDS}\n    tls_ca: ~/ca.pem\n    tls_cert: ${CONFIG_TEST_CERT}\n    tls_key: client.key")
 	got, err := Load(path, "", "")
 	if err != nil {
 		t.Fatal(err)
@@ -154,12 +154,12 @@ func TestLoadExpandsEnvironmentAndResolvesPaths(t *testing.T) {
 		t.Fatalf("incorrect expansion: %+v", c)
 	}
 	t.Setenv("CONFIG_TEST_TOKEN", "token-value")
-	writeConfig(t, path, `{"connections":[{"name":"a","url":"nats://server","token":"${CONFIG_TEST_TOKEN}"}]}`)
+	writeConfig(t, path, "connections:\n  - name: a\n    url: nats://server\n    token: ${CONFIG_TEST_TOKEN}")
 	got, err = Load(path, "", "")
 	if err != nil || got.Connections[0].Token != "token-value" {
 		t.Fatalf("token expansion failed: %+v, %v", got, err)
 	}
-	writeConfig(t, path, `{"connections":[{"name":"a","url":"nats://server","token":"prefix-${NATS_TUI_TEST_MISSING_VARIABLE}-secret"}]}`)
+	writeConfig(t, path, "connections:\n  - name: a\n    url: nats://server\n    token: prefix-${NATOP_TEST_MISSING_VARIABLE}-secret")
 	if _, err := Load(path, "", ""); err == nil || strings.Contains(err.Error(), "prefix-") {
 		t.Fatalf("missing environment variable should return a safe error: %v", err)
 	}
@@ -187,8 +187,8 @@ func TestSafeURLAndRedact(t *testing.T) {
 
 func TestValidationErrorsDoNotLeakSecrets(t *testing.T) {
 	isolatedConfig(t)
-	path := filepath.Join(t.TempDir(), "config.json")
-	writeConfig(t, path, `{"connections":[{"name":"test","url":"nats://ultrasecret@host:bad","token":"othersecret"}]}`)
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	writeConfig(t, path, "connections:\n  - name: test\n    url: nats://ultrasecret@host:bad\n    token: othersecret")
 	_, err := Load(path, "", "")
 	if err == nil {
 		t.Fatal("invalid config accepted")

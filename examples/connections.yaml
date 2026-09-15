@@ -1,0 +1,8 @@
+refresh: 2s
+connections:
+  - name: local
+    url: nats://localhost:4222
+  - name: production
+    url: tls://nats.example.com:4222
+    credentials: ${NATS_CREDS}
+    tls_ca: certs/ca.pem

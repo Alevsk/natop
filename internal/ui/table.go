@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/alevsk/nats-tui/internal/monitor"
+	"github.com/alevsk/natop/internal/monitor"
 	"github.com/gdamore/tcell/v2"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/rivo/tview"
@@ -170,7 +170,7 @@ func (u *UI) render() {
 	if u.demo {
 		mode = "DEMO · sample data"
 	}
-	u.header.SetText(fmt.Sprintf(" [::b][#67e8f9]nats-tui[-:-:-]  [gray]%s[-]     [green]%d/%d online[-]  [yellow]%d issues[-]\n [#67e8f9]1[-] Streams   [#67e8f9]2[-] Consumers   [#67e8f9]3[-] Connections", mode, online, len(u.snapshots), issues))
+	u.header.SetText(fmt.Sprintf(" [::b][#67e8f9]natop[-:-:-]  [gray]%s[-]     [green]%d/%d online[-]  [yellow]%d issues[-]\n [#67e8f9]1[-] Streams   [#67e8f9]2[-] Consumers   [#67e8f9]3[-] Connections", mode, online, len(u.snapshots), issues))
 	connection := "all connections"
 	if u.connection != "" {
 		connection = safe(u.connection)

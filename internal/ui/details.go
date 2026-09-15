@@ -63,7 +63,7 @@ func (u *UI) showDetails() {
 }
 
 func (u *UI) showHelp() {
-	u.showText("Help", ` [#67e8f9::b]nats-tui[-:-:-] · JetStream at a glance
+	u.showText("Help", ` [#67e8f9::b]natop[-:-:-] · JetStream at a glance
 
  [#67e8f9]1 / 2 / 3[-]     Streams / all consumers / connections
  [#67e8f9]↑ ↓ or j k[-]    Move selection

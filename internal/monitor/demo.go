@@ -3,7 +3,7 @@ package monitor
 import (
 	"time"
 
-	"github.com/alevsk/nats-tui/internal/config"
+	"github.com/alevsk/natop/internal/config"
 	"github.com/nats-io/nats.go/jetstream"
 )
 

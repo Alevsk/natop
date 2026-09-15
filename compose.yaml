@@ -1,24 +1,13 @@
 services:
-  nats-tui:
-    image: ${NATS_TUI_IMAGE:-nats-tui:local}
+  natop:
+    image: ${NATOP_IMAGE:-natop:local}
     stdin_open: true
     tty: true
     environment:
       TERM: xterm-256color
-    entrypoint: ["nats-tui", "--config", "/config/connections.json"]
+    entrypoint: ["natop", "--config", "/config/connections.yaml"]
     volumes:
       - type: bind
-        source: ${NATS_TUI_CONFIG:-./examples/connections.json}
-        target: /config/connections.json
+        source: ${NATOP_CONFIG:-./examples/connections.yaml}
+        target: /config/connections.yaml
         read_only: true
-    networks:
-      - reelify
-      - respondent
-
-networks:
-  reelify:
-    external: true
-    name: ${REELIFY_NETWORK:-reelify-data}
-  respondent:
-    external: true
-    name: ${RESPONDENT_NETWORK:-respondent-platform_respondent-data}

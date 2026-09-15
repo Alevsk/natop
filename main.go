@@ -7,35 +7,61 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 
-	"github.com/alevsk/nats-tui/internal/config"
-	"github.com/alevsk/nats-tui/internal/monitor"
-	"github.com/alevsk/nats-tui/internal/ui"
+	"github.com/alevsk/natop/internal/config"
+	"github.com/alevsk/natop/internal/monitor"
+	"github.com/alevsk/natop/internal/ui"
 	"golang.org/x/term"
 )
 
 var version = "dev"
 
 func main() {
+	if version == "dev" {
+		if info, ok := debug.ReadBuildInfo(); ok {
+			if info.Main.Version != "" && info.Main.Version != "(devel)" {
+				version = info.Main.Version
+			} else {
+				var rev, modified string
+				for _, s := range info.Settings {
+					switch s.Key {
+					case "vcs.revision":
+						rev = s.Value
+					case "vcs.modified":
+						if s.Value == "true" {
+							modified = "+dirty"
+						}
+					}
+				}
+				if rev != "" {
+					if len(rev) > 7 {
+						rev = rev[:7]
+					}
+					version = fmt.Sprintf("dev (%s%s)", rev, modified)
+				}
+			}
+		}
+	}
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "nats-tui:", err)
+		fmt.Fprintln(os.Stderr, "natop:", err)
 		os.Exit(1)
 	}
 }
 
 func run() error {
-	flags := flag.NewFlagSet("nats-tui", flag.ContinueOnError)
+	flags := flag.NewFlagSet("natop", flag.ContinueOnError)
 	var server, path, refresh string
 	var demo, showVersion bool
 	flags.StringVar(&server, "s", "", "NATS server URL (overrides config)")
 	flags.StringVar(&server, "server", "", "NATS server URL (same as -s)")
-	flags.StringVar(&path, "config", "", "path to named-connections JSON config")
+	flags.StringVar(&path, "config", "", "path to named-connections YAML config")
 	flags.StringVar(&refresh, "refresh", "", "refresh interval, e.g. 2s (250ms–1h)")
 	flags.BoolVar(&demo, "demo", false, "explore the UI with sample data; no server needed")
 	flags.BoolVar(&showVersion, "version", false, "print version and exit")
 	flags.Usage = func() {
-		fmt.Fprintln(flags.Output(), "nats-tui — a live JetStream dashboard\n\nUsage: nats-tui [options]\n\nExamples:\n  nats-tui -s nats://localhost:4222\n  nats-tui --config connections.json\n  nats-tui --demo\n\nOptions:")
+		fmt.Fprintln(flags.Output(), "natop — a live JetStream dashboard\n\nUsage: natop [options]\n\nExamples:\n  natop -s nats://localhost:4222\n  natop --config connections.yaml\n  natop --demo\n\nOptions:")
 		flags.PrintDefaults()
 	}
 	if err := flags.Parse(os.Args[1:]); err != nil {
@@ -48,7 +74,7 @@ func run() error {
 		return errors.New("unexpected positional arguments; see --help")
 	}
 	if showVersion {
-		fmt.Println("nats-tui", version)
+		fmt.Println("natop", version)
 		return nil
 	}
 	if demo && (path != "" || server != "") {

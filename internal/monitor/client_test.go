@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alevsk/nats-tui/internal/config"
+	"github.com/alevsk/natop/internal/config"
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"

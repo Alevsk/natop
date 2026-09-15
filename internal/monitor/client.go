@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alevsk/nats-tui/internal/config"
+	"github.com/alevsk/natop/internal/config"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -40,7 +40,7 @@ func (c *Client) connect() error {
 		return err
 	}
 	opts := []nats.Option{
-		nats.Name("nats-tui"), nats.Timeout(c.timeout),
+		nats.Name("natop"), nats.Timeout(c.timeout),
 		nats.MaxReconnects(-1), nats.ReconnectWait(time.Second),
 		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
 			c.mu.Lock()

@@ -2,7 +2,6 @@
 package config
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
@@ -22,24 +23,24 @@ type Config struct {
 }
 
 type Connection struct {
-	Name        string `json:"name"`
-	URL         string `json:"url"`
-	Credentials string `json:"credentials,omitempty"`
-	Token       string `json:"token,omitempty"`
-	User        string `json:"user,omitempty"`
-	Password    string `json:"password,omitempty"`
-	TLSCA       string `json:"tls_ca,omitempty"`
-	TLSCert     string `json:"tls_cert,omitempty"`
-	TLSKey      string `json:"tls_key,omitempty"`
-	Domain      string `json:"domain,omitempty"`
+	Name        string `yaml:"name"`
+	URL         string `yaml:"url"`
+	Credentials string `yaml:"credentials,omitempty"`
+	Token       string `yaml:"token,omitempty"`
+	User        string `yaml:"user,omitempty"`
+	Password    string `yaml:"password,omitempty"`
+	TLSCA       string `yaml:"tls_ca,omitempty"`
+	TLSCert     string `yaml:"tls_cert,omitempty"`
+	TLSKey      string `yaml:"tls_key,omitempty"`
+	Domain      string `yaml:"domain,omitempty"`
 }
 
 // Load applies server, file, environment, and localhost defaults in that order.
 // A server override bypasses config files completely. Refresh overrides the file.
 func Load(path, server, refresh string) (Config, error) {
 	var disk struct {
-		Refresh     string       `json:"refresh"`
-		Connections []Connection `json:"connections"`
+		Refresh     string       `yaml:"refresh"`
+		Connections []Connection `yaml:"connections"`
 	}
 	base := "."
 	if server != "" {
@@ -51,7 +52,7 @@ func Load(path, server, refresh string) (Config, error) {
 			if err != nil {
 				return Config{}, errors.New("cannot locate the default config directory")
 			}
-			path = filepath.Join(dir, "nats-tui", "config.json")
+			path = filepath.Join(dir, "natop", "config.yaml")
 		}
 		var err error
 		path, err = resolvePath(path, ".")
@@ -70,13 +71,16 @@ func Load(path, server, refresh string) (Config, error) {
 			disk.Connections = []Connection{{Name: "default", URL: server}}
 		} else {
 			defer f.Close()
-			decoder := json.NewDecoder(f)
-			decoder.DisallowUnknownFields()
+			decoder := yaml.NewDecoder(f)
+			decoder.KnownFields(true)
 			if err := decoder.Decode(&disk); err != nil {
-				return Config{}, errors.New("invalid config JSON: check field names and value types")
+				if err == io.EOF {
+					return Config{}, errors.New("config file is empty")
+				}
+				return Config{}, errors.New("invalid config YAML: check field names and value types")
 			}
 			if decoder.Decode(new(any)) != io.EOF {
-				return Config{}, errors.New("invalid config JSON: trailing content")
+				return Config{}, errors.New("invalid config YAML: trailing content")
 			}
 			base = filepath.Dir(path)
 		}

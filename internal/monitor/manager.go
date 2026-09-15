@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alevsk/nats-tui/internal/config"
+	"github.com/alevsk/natop/internal/config"
 )
 
 // Manager runs one independent worker per configured deployment.
