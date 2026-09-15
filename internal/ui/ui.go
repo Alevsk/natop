@@ -136,7 +136,7 @@ func (u *UI) Run(ctx context.Context, updates <-chan monitor.Snapshot) error {
 		for {
 			select {
 			case <-ctx.Done():
-				go u.app.QueueEvent(tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModNone))
+				u.app.Stop()
 				return
 			case <-ticker.C:
 				if u.wakePending.CompareAndSwap(false, true) {
