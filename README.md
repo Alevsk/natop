@@ -4,7 +4,7 @@ A small, keyboard-driven NATS JetStream dashboard. One Go binary shows live
 streams and consumer backlogs across multiple deployments, with filtering,
 sorting, drill-down, and connection status.
 
-<video src="docs/media/demo.mp4" controls="controls" muted="muted" style="max-height:640px;"></video>
+<video src="https://github.com/user-attachments/assets/e73178b1-957c-4052-96f7-b7ecc0cc4b5a" controls="controls" muted="muted" style="max-height:640px;"></video>
 
 ```text
  natop  LIVE                       2/2 online  0 issues
@@ -58,6 +58,14 @@ make build VERSION=0.1.0
 The release builds disable CGO and strip debug information. The NATS server
 dependency in `go.mod` is used by tests; it is not embedded in the application.
 
+### Docker
+
+If you prefer to run `natop` inside a container (for example, to easily attach it to existing Docker networks), you can build the image yourself:
+
+```sh
+make docker-build IMAGE=natop:latest
+make docker-run NETWORK=my-network SERVER=nats://my-nats:4222
+```
 ## Navigation
 
 | Key | Action |
