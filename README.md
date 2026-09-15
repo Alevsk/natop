@@ -4,6 +4,8 @@ A small, keyboard-driven NATS JetStream dashboard. One Go binary shows live
 streams and consumer backlogs across multiple deployments, with filtering,
 sorting, drill-down, and connection status.
 
+<video src="docs/media/demo.mp4" controls="controls" muted="muted" style="max-height:640px;"></video>
+
 ```text
  natop  LIVE                       2/2 online  0 issues
  1 Streams   2 Consumers   3 Connections
