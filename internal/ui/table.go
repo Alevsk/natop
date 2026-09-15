@@ -170,7 +170,14 @@ func (u *UI) render() {
 	if u.demo {
 		mode = "DEMO · sample data"
 	}
-	u.header.SetText(fmt.Sprintf(" [::b][#67e8f9]natop[-:-:-]  [gray]%s[-]     [green]%d/%d online[-]  [yellow]%d issues[-]\n [#67e8f9]1[-] Streams   [#67e8f9]2[-] Consumers   [#67e8f9]3[-] Connections", mode, online, len(u.snapshots), issues))
+	var totalStreams, totalConsumers int
+	for _, s := range u.snapshots {
+		totalStreams += len(s.Streams)
+		for _, st := range s.Streams {
+			totalConsumers += len(st.Consumers)
+		}
+	}
+	u.header.SetText(fmt.Sprintf(" [::b][#67e8f9]natop[-:-:-]  [gray]%s[-]     [green]%d/%d online[-]  [yellow]%d issues[-]\n [#67e8f9]%d[-] Streams   [#67e8f9]%d[-] Consumers   [#67e8f9]%d[-] Connections", mode, online, len(u.snapshots), issues, totalStreams, totalConsumers, len(u.snapshots)))
 	connection := "all connections"
 	if u.connection != "" {
 		connection = safe(u.connection)
