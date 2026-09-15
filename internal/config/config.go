@@ -125,6 +125,9 @@ func (c Connection) Validate() error {
 	if err != nil || u.Opaque != "" || u.Hostname() == "" || strings.ContainsAny(u.Host, ", \t\r\n") {
 		return errors.New("URL must contain one valid NATS server endpoint")
 	}
+	if strings.Count(u.Host, ":") > 1 && !strings.Contains(u.Host, "[") {
+		return errors.New("URL must contain one valid NATS server endpoint")
+	}
 	switch u.Scheme {
 	case "nats", "tls", "ws", "wss":
 	default:
