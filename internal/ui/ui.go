@@ -136,11 +136,11 @@ func (u *UI) Run(ctx context.Context, updates <-chan monitor.Snapshot) error {
 		for {
 			select {
 			case <-ctx.Done():
-				u.app.QueueEvent(tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModNone))
+				go u.app.QueueEvent(tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModNone))
 				return
 			case <-ticker.C:
 				if u.wakePending.CompareAndSwap(false, true) {
-					u.app.QueueEvent(tcell.NewEventKey(tcell.KeyF24, 0, tcell.ModNone))
+					go u.app.QueueEvent(tcell.NewEventKey(tcell.KeyF24, 0, tcell.ModNone))
 				}
 			}
 		}
