@@ -1,0 +1,9 @@
+.git
+bin
+docs
+config.json
+connections.local.json
+*.creds
+*.key
+.env
+.DS_Store
