@@ -76,6 +76,7 @@ make docker-run NETWORK=my-network SERVER=nats://my-nats:4222
 | `g` / `G`, Page Up/Down | Jump or page through rows |
 | `Enter` | Open a stream's consumers, or inspect a consumer/connection |
 | `d` | Full details for the selected stream, consumer, or connection |
+| `e` | While details are open, export its raw metadata JSON to disk |
 | `/` | Filter visible rows; Enter keeps it, Escape clears it |
 | `c` | Show one connection or all connections |
 | `s` | Cycle sort columns; numeric columns sort largest first |
@@ -119,6 +120,9 @@ Configuration precedence:
 `--refresh` overrides the file's interval. The default is `2s`; allowed values
 are `250ms` through `1h`. A slow polling pass finishes before the next one starts.
 `make run` respects these defaults unless `SERVER=` or `CONFIG=` is supplied.
+
+`--export-dir` sets where the `e` key in details saves metadata JSON; it
+defaults to `natop` under the OS temp directory and is created if missing.
 
 Use one authentication method per connection:
 

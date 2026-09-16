@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime/debug"
 	"syscall"
 
@@ -52,12 +53,13 @@ func main() {
 
 func run() error {
 	flags := flag.NewFlagSet("natop", flag.ContinueOnError)
-	var server, path, refresh string
+	var server, path, refresh, exportDir string
 	var demo, showVersion bool
 	flags.StringVar(&server, "s", "", "NATS server URL (overrides config)")
 	flags.StringVar(&server, "server", "", "NATS server URL (same as -s)")
 	flags.StringVar(&path, "config", "", "path to named-connections YAML config")
 	flags.StringVar(&refresh, "refresh", "", "refresh interval, e.g. 2s (250ms–1h)")
+	flags.StringVar(&exportDir, "export-dir", filepath.Join(os.TempDir(), "natop"), "directory for metadata exported with 'e' in details")
 	flags.BoolVar(&demo, "demo", false, "explore the UI with sample data; no server needed")
 	flags.BoolVar(&showVersion, "version", false, "print version and exit")
 	flags.Usage = func() {
@@ -100,7 +102,7 @@ func run() error {
 		m = monitor.NewDemo(cfg.Refresh)
 	}
 	updates := m.Start(ctx)
-	err = ui.New(m.Initial(), demo, m.Refresh).Run(ctx, updates)
+	err = ui.New(m.Initial(), demo, m.Refresh).SetExportDir(exportDir).Run(ctx, updates)
 	cancel()
 	<-m.Done()
 	return err
