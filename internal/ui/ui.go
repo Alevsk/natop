@@ -39,6 +39,7 @@ type UI struct {
 	sort                                             int
 	overlay                                          bool
 	filtering                                        bool
+	onlyIssues                                       bool
 	demo                                             bool
 	refresh                                          func()
 	wakePending                                      atomic.Bool
@@ -205,6 +206,9 @@ func (u *UI) key(e *tcell.EventKey) *tcell.EventKey {
 		u.filtering = true
 		u.layout.AddItem(u.input, 1, 0, true)
 		u.app.SetFocus(u.input)
+	case '!':
+		u.onlyIssues = !u.onlyIssues
+		u.render()
 	case 'c':
 		u.chooseConnection()
 	case 'd':

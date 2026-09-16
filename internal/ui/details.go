@@ -73,6 +73,7 @@ func (u *UI) showHelp() {
  [#67e8f9]Enter[-]         Open a stream's consumers or selected row's details
  [#67e8f9]d[-]             Inspect selected row's full metadata
  [#67e8f9]/[-]             Filter rows; Enter keeps filter, Esc clears it
+ [#67e8f9]![-]             Toggle issues-only: hide healthy rows in this view
  [#67e8f9]c[-]             Select one connection or all connections
  [#67e8f9]s[-]             Cycle sort columns (numeric sorts are descending)
  [#67e8f9]r[-]             Refresh now

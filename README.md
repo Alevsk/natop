@@ -77,8 +77,9 @@ make docker-run NETWORK=my-network SERVER=nats://my-nats:4222
 | `Enter` | Open a stream's consumers, or inspect a consumer/connection |
 | `d` | Full details for the selected stream, consumer, or connection |
 | `/` | Filter visible rows; Enter keeps it, Escape clears it |
+| `!` | Toggle issues-only: hide healthy rows in the current view |
 | `c` | Show one connection or all connections |
-| `s` | Cycle sort columns; numeric columns sort largest first |
+| `s` | Cycle sort columns; numeric columns sort largest first, connections by worst status or staleness |
 | `r` | Refresh all connections immediately |
 | `Esc` | Close details/help, clear a filter, or return to streams |
 | `?` | Help and metric definitions |
@@ -88,6 +89,11 @@ The default view combines all connections. Resource identity includes the
 connection, so `AUDIT_EVENTS` in Reelify and Respondent are independent rows.
 Refreshes preserve the selected resource. Details show a stable snapshot from
 when you opened them; close and reopen to see updated details.
+
+Watching hundreds of connections: sort the connections view by status to put
+the most broken connections first, or by staleness to find the ones that have
+gone longest without a successful refresh. Press `!` at any time to hide
+healthy rows in whatever view is open, composed with the current `/` filter.
 
 ## Configuration
 
