@@ -6,9 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alevsk/natop/internal/monitor"
 	"github.com/gdamore/tcell/v2"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 func TestColorizeJSONCannotInjectTerminalMarkup(t *testing.T) {
@@ -88,12 +90,16 @@ func TestExportWritesRawJSONForOpenDetails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, err := json.MarshalIndent(snap.Streams[0].Info, "", "  ")
+	want, err := marshalDetails(snap.Streams[0].Info)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(got) != string(want) {
 		t.Fatalf("exported file is not raw uncolored metadata:\n%s\nwant:\n%s", got, want)
+	}
+	escaped := "\\u003e"
+	if !strings.Contains(string(got), "work.>") || strings.Contains(string(got), escaped) {
+		t.Fatalf("exported file HTML-escaped the subject wildcard: %s", got)
 	}
 	if !strings.Contains(u.overlayView.GetTitle(), "Exported to") {
 		t.Fatalf("no export confirmation shown in overlay title: %q", u.overlayView.GetTitle())
@@ -117,5 +123,69 @@ func TestExportSkipsRowsWithoutMetadata(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Fatalf("export wrote a file for a row with no metadata: %v", entries)
+	}
+}
+
+func TestDetailsOverlayDoesNotHTMLEscapeSubjects(t *testing.T) {
+	u := New([]monitor.Snapshot{sample("prod", 5)}, false, nil) // stream subject is "work.>"
+	u.table.Select(1, 0)
+	press(u, tcell.KeyRune, 'd')
+	text := u.overlayView.GetText(true)
+	if !strings.Contains(text, "work.>") {
+		t.Fatalf("colorized overlay lost the subject wildcard: %q", text)
+	}
+	if strings.Contains(text, "\\u003e") {
+		t.Fatalf("colorized overlay HTML-escaped the subject wildcard: %q", text)
+	}
+}
+
+func TestColorizeJSONAnnotatesKnownDurationField(t *testing.T) {
+	data, err := marshalDetails(jetstream.ConsumerConfig{AckWait: 5 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"ack_wait": 5000000000`) {
+		t.Fatalf("raw export bytes lost the untouched nanosecond value: %s", data)
+	}
+	got := colorizeJSON(data)
+	if !strings.Contains(got, "5000000000") || !strings.Contains(got, "(5s)") {
+		t.Fatalf("colorized output missing raw value or human duration annotation: %q", got)
+	}
+	if !strings.Contains(string(data), `"ack_wait": 5000000000`) {
+		t.Fatalf("colorizing mutated the raw export bytes: %s", data)
+	}
+}
+
+func TestColorizeJSONAnnotatesDurationArrayElements(t *testing.T) {
+	data, err := marshalDetails(jetstream.ConsumerConfig{BackOff: []time.Duration{5 * time.Second, 10 * time.Second, time.Minute}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := colorizeJSON(data)
+	for _, want := range []string{"5000000000", "(5s)", "10000000000", "(10s)", "60000000000", "(1m0s)"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("backoff element annotation missing %q: %q", want, got)
+		}
+	}
+}
+
+func TestColorizeJSONAnnotatesOnlyZeroTimestamp(t *testing.T) {
+	type payload struct {
+		Zero time.Time `json:"zero"`
+		Real time.Time `json:"real"`
+	}
+	real := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
+	data, err := marshalDetails(payload{Real: real})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := colorizeJSON(data)
+	if !strings.Contains(got, "(never)") {
+		t.Fatalf("zero timestamp not annotated: %q", got)
+	}
+	for _, line := range strings.Split(got, "\n") {
+		if strings.Contains(line, real.Format(time.RFC3339)) && strings.Contains(line, "(never)") {
+			t.Fatalf("non-zero timestamp incorrectly annotated: %q", line)
+		}
 	}
 }

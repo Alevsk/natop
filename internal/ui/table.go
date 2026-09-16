@@ -13,6 +13,12 @@ import (
 	"github.com/rivo/tview"
 )
 
+// nameColumn is each view's identity column: STREAM for streams,
+// CONSUMER (not the parent STREAM) for consumers, SERVER for connections.
+// It gets SetExpansion instead of the fixed SetMaxWidth given to every
+// other column.
+var nameColumn = map[view]int{streamsView: 1, consumersView: 2, connectionsView: 1}
+
 type row struct {
 	id, connection string
 	cells          []string
@@ -182,9 +188,15 @@ func (u *UI) render() {
 			if j == len(r.cells)-1 && isIssueState(value) {
 				color = tcell.ColorYellow
 			}
-			cell := tview.NewTableCell(" " + safe(value) + " ").SetTextColor(color).SetMaxWidth(36)
-			if j == 1 {
+			cell := tview.NewTableCell(" " + safe(value) + " ").SetTextColor(color)
+			if j == nameColumn[u.view] {
+				// The identity column grows into unused terminal width instead of
+				// hard-capping at 36; a narrow terminal still shrinks it gracefully
+				// (and the h/l horizontal scroll already documented in help covers
+				// the rest), so there is no need to ellipsis-truncate real names.
 				cell.SetExpansion(1)
+			} else {
+				cell.SetMaxWidth(36)
 			}
 			u.table.SetCell(i+1, j, cell)
 		}
