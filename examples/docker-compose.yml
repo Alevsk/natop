@@ -1,0 +1,35 @@
+# Example Docker Compose setup for natop.
+#
+# Copy this file and docker-compose.connections.yaml next to each other
+# (a gitignored `local/` directory works well), edit NATS_NETWORK and
+# NATS_HOST below to match your setup, then run:
+#
+#   docker compose run --rm natop
+#
+# Use `run`, not `up`: `up` only streams container logs and never attaches
+# your terminal, so the interactive dashboard gets no keyboard input and
+# looks frozen. `run` allocates and attaches a real TTY.
+services:
+  natop:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    stdin_open: true
+    tty: true
+    environment:
+      TERM: xterm-256color
+      # Injected into docker-compose.connections.yaml as ${NATS_HOST}; the
+      # service/container name of your NATS server on the network below.
+      NATS_HOST: ${NATS_HOST:-nats}
+    entrypoint: ["natop", "--config", "/config/connections.yaml"]
+    volumes:
+      - ./docker-compose.connections.yaml:/config/connections.yaml:ro
+    networks:
+      - nats
+
+networks:
+  nats:
+    # Join an existing network, e.g. the one your NATS server's own
+    # docker-compose stack already created, instead of creating a new one.
+    external: true
+    name: ${NATS_NETWORK:-nats-network}

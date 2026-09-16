@@ -1,0 +1,4 @@
+refresh: 2s
+connections:
+  - name: docker
+    url: nats://${NATS_HOST}:4222

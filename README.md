@@ -66,6 +66,26 @@ If you prefer to run `natop` inside a container (for example, to easily attach i
 make docker-build IMAGE=natop:latest
 make docker-run NETWORK=my-network SERVER=nats://my-nats:4222
 ```
+
+#### Docker Compose
+
+To join an existing Docker network instead (for example, one already running
+your NATS server via its own compose stack), copy the two files in
+`examples/docker-compose*` next to each other — a gitignored `local/`
+directory works well — and edit `NATS_NETWORK` and `NATS_HOST` to match your
+setup:
+
+```sh
+mkdir -p local
+cp examples/docker-compose.yml examples/docker-compose.connections.yaml local/
+cd local
+docker compose run --rm natop
+```
+
+Use `run`, not `up`: `up` only streams container logs and never attaches your
+terminal, so the interactive dashboard receives no keyboard input and looks
+frozen. `run` allocates and attaches a real TTY.
+
 ## Navigation
 
 | Key | Action |
