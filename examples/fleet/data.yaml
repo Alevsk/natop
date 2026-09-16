@@ -1,0 +1,4 @@
+connections:
+  - name: data-prod
+    url: tls://nats.data.example.com:4222
+    token: ${DATA_TEAM_TOKEN}

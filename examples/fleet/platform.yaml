@@ -1,0 +1,7 @@
+connections:
+  - name: platform-prod
+    url: tls://nats.platform.example.com:4222
+    credentials: ${NATS_CREDS}
+    tls_ca: certs/ca.pem
+  - name: platform-staging
+    url: nats://nats-staging.platform.example.com:4222

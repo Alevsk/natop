@@ -103,6 +103,88 @@ func TestLoadRefreshBounds(t *testing.T) {
 	}
 }
 
+func TestLoadDirectory(t *testing.T) {
+	t.Run("merges files in filename order", func(t *testing.T) {
+		isolatedConfig(t)
+		dir := t.TempDir()
+		writeConfig(t, filepath.Join(dir, "team-a.yaml"), "refresh: 3s\nconnections:\n  - name: a1\n    url: nats://a1:4222\n  - name: a2\n    url: nats://a2:4222")
+		writeConfig(t, filepath.Join(dir, "team-b.yml"), "connections:\n  - name: b1\n    url: nats://b1:4222\n    credentials: user.creds")
+		got, err := Load(dir, "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Refresh != 3*time.Second {
+			t.Fatalf("expected the sole refresh setting (3s) to apply, got %v", got.Refresh)
+		}
+		var names []string
+		for _, c := range got.Connections {
+			names = append(names, c.Name)
+		}
+		if strings.Join(names, ",") != "a1,a2,b1" {
+			t.Fatalf("expected files merged in filename order with each file's own order preserved: %v", names)
+		}
+		if got.Connections[2].Credentials != filepath.Join(dir, "user.creds") {
+			t.Fatalf("credentials should resolve relative to team-b.yml's own directory: %+v", got.Connections[2])
+		}
+	})
+
+	t.Run("duplicate name across files names both files", func(t *testing.T) {
+		isolatedConfig(t)
+		dir := t.TempDir()
+		writeConfig(t, filepath.Join(dir, "team-a.yaml"), "connections:\n  - name: orders\n    url: nats://a:4222")
+		writeConfig(t, filepath.Join(dir, "team-b.yaml"), "connections:\n  - name: other\n    url: nats://b:4222\n  - name: orders\n    url: nats://c:4222")
+		_, err := Load(dir, "", "")
+		want := `team-b.yaml: connection 2: duplicate name "orders" (already defined in team-a.yaml)`
+		if err == nil || err.Error() != want {
+			t.Fatalf("error = %v, want %q", err, want)
+		}
+	})
+
+	t.Run("conflicting refresh values error without an override", func(t *testing.T) {
+		isolatedConfig(t)
+		dir := t.TempDir()
+		writeConfig(t, filepath.Join(dir, "team-a.yaml"), "refresh: 3s\nconnections:\n  - name: a\n    url: nats://a:4222")
+		writeConfig(t, filepath.Join(dir, "team-b.yaml"), "refresh: 5s\nconnections:\n  - name: b\n    url: nats://b:4222")
+		_, err := Load(dir, "", "")
+		if err == nil {
+			t.Fatal("conflicting refresh values accepted")
+		}
+		msg := err.Error()
+		if !strings.Contains(msg, "team-a.yaml") || !strings.Contains(msg, "team-b.yaml") || !strings.Contains(msg, "--refresh") {
+			t.Fatalf("error should name both conflicting files and suggest --refresh: %v", err)
+		}
+	})
+
+	t.Run("refresh flag resolves a conflict", func(t *testing.T) {
+		isolatedConfig(t)
+		dir := t.TempDir()
+		writeConfig(t, filepath.Join(dir, "team-a.yaml"), "refresh: 3s\nconnections:\n  - name: a\n    url: nats://a:4222")
+		writeConfig(t, filepath.Join(dir, "team-b.yaml"), "refresh: 5s\nconnections:\n  - name: b\n    url: nats://b:4222")
+		got, err := Load(dir, "", "1s")
+		if err != nil || got.Refresh != time.Second {
+			t.Fatalf("--refresh should override conflicting file settings: %+v, %v", got, err)
+		}
+	})
+
+	t.Run("agreeing refresh values across files are accepted", func(t *testing.T) {
+		isolatedConfig(t)
+		dir := t.TempDir()
+		writeConfig(t, filepath.Join(dir, "team-a.yaml"), "refresh: 4s\nconnections:\n  - name: a\n    url: nats://a:4222")
+		writeConfig(t, filepath.Join(dir, "team-b.yaml"), "refresh: 4s\nconnections:\n  - name: b\n    url: nats://b:4222")
+		got, err := Load(dir, "", "")
+		if err != nil || got.Refresh != 4*time.Second {
+			t.Fatalf("agreeing refresh values should be used without error: %+v, %v", got, err)
+		}
+	})
+
+	t.Run("empty directory is an error", func(t *testing.T) {
+		isolatedConfig(t)
+		if _, err := Load(t.TempDir(), "", ""); err == nil {
+			t.Fatal("empty config directory accepted")
+		}
+	})
+}
+
 func TestConnectionValidate(t *testing.T) {
 	for _, rawURL := range []string{"nats://localhost", "tls://localhost:4222", "ws://localhost:8080/nats", "wss://localhost:443", "nats://[::1]:4222", "nats://user:pass@localhost", "nats://token@localhost"} {
 		if err := (Connection{Name: "test", URL: rawURL}).Validate(); err != nil {

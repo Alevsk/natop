@@ -37,6 +37,7 @@ type Connection struct {
 
 // Load applies server, file, environment, and localhost defaults in that order.
 // A server override bypasses config files completely. Refresh overrides the file.
+// A directory config path merges every *.yaml/*.yml file directly inside it.
 func Load(path, server, refresh string) (Config, error) {
 	var disk struct {
 		Refresh     string       `yaml:"refresh"`
@@ -59,30 +60,38 @@ func Load(path, server, refresh string) (Config, error) {
 		if err != nil {
 			return Config{}, errors.New("cannot resolve config path")
 		}
-		f, err := os.Open(path)
-		if err != nil {
-			if explicit || !errors.Is(err, os.ErrNotExist) {
-				return Config{}, errors.New("cannot read config file")
+		if info, statErr := os.Stat(path); statErr == nil && info.IsDir() {
+			conns, dirRefresh, err := loadDirectory(path, refresh)
+			if err != nil {
+				return Config{}, err
 			}
-			server = os.Getenv("NATS_URL")
-			if server == "" {
-				server = "nats://localhost:4222"
-			}
-			disk.Connections = []Connection{{Name: "default", URL: server}}
+			disk.Connections, disk.Refresh = conns, dirRefresh
 		} else {
-			defer f.Close()
-			decoder := yaml.NewDecoder(f)
-			decoder.KnownFields(true)
-			if err := decoder.Decode(&disk); err != nil {
-				if err == io.EOF {
-					return Config{}, errors.New("config file is empty")
+			f, err := os.Open(path)
+			if err != nil {
+				if explicit || !errors.Is(err, os.ErrNotExist) {
+					return Config{}, errors.New("cannot read config file")
 				}
-				return Config{}, errors.New("invalid config YAML: check field names and value types")
+				server = os.Getenv("NATS_URL")
+				if server == "" {
+					server = "nats://localhost:4222"
+				}
+				disk.Connections = []Connection{{Name: "default", URL: server}}
+			} else {
+				defer f.Close()
+				decoder := yaml.NewDecoder(f)
+				decoder.KnownFields(true)
+				if err := decoder.Decode(&disk); err != nil {
+					if err == io.EOF {
+						return Config{}, errors.New("config file is empty")
+					}
+					return Config{}, errors.New("invalid config YAML: check field names and value types")
+				}
+				if decoder.Decode(new(any)) != io.EOF {
+					return Config{}, errors.New("invalid config YAML: trailing content")
+				}
+				base = filepath.Dir(path)
 			}
-			if decoder.Decode(new(any)) != io.EOF {
-				return Config{}, errors.New("invalid config YAML: trailing content")
-			}
-			base = filepath.Dir(path)
 		}
 	}
 	if refresh == "" {
@@ -98,24 +107,106 @@ func Load(path, server, refresh string) (Config, error) {
 	if len(disk.Connections) == 0 {
 		return Config{}, errors.New("config must contain at least one connection")
 	}
-	names := make(map[string]bool)
-	for i := range disk.Connections {
-		c := &disk.Connections[i]
-		if strings.TrimSpace(c.Name) == "" {
-			return Config{}, fmt.Errorf("connection %d: name is required", i+1)
-		}
-		if names[c.Name] {
-			return Config{}, fmt.Errorf("connection %d: duplicate name", i+1)
-		}
-		names[c.Name] = true
-		if err := c.expand(base); err != nil {
-			return Config{}, fmt.Errorf("connection %d: %w", i+1, err)
-		}
-		if err := c.Validate(); err != nil {
-			return Config{}, fmt.Errorf("connection %d: %w", i+1, err)
-		}
+	if err := validateConnections(disk.Connections, base, make(map[string]string), ""); err != nil {
+		return Config{}, err
 	}
 	return Config{Refresh: interval, Connections: disk.Connections}, nil
+}
+
+// loadDirectory merges every *.yaml/*.yml file directly inside dir (not
+// recursive), sorted by filename for determinism. Each file's relative paths
+// resolve against that file's own directory. cliRefresh is the --refresh flag;
+// when it is empty, files must agree on any refresh they set.
+func loadDirectory(dir, cliRefresh string) ([]Connection, string, error) {
+	yamls, err := filepath.Glob(filepath.Join(dir, "*.yaml"))
+	if err != nil {
+		return nil, "", errors.New("cannot list config directory")
+	}
+	ymls, err := filepath.Glob(filepath.Join(dir, "*.yml"))
+	if err != nil {
+		return nil, "", errors.New("cannot list config directory")
+	}
+	files := append(yamls, ymls...)
+	sort.Strings(files)
+	if len(files) == 0 {
+		return nil, "", errors.New("no config files found in directory")
+	}
+	var conns []Connection
+	var refresh, refreshFile string
+	origins := make(map[string]string)
+	for _, path := range files {
+		name := filepath.Base(path)
+		fileRefresh, fileConns, err := decodeConnectionsFile(path)
+		if err != nil {
+			return nil, "", fmt.Errorf("%s: %w", name, err)
+		}
+		if err := validateConnections(fileConns, filepath.Dir(path), origins, name); err != nil {
+			return nil, "", fmt.Errorf("%s: %w", name, err)
+		}
+		if fileRefresh != "" && cliRefresh == "" {
+			if refresh != "" && refresh != fileRefresh {
+				return nil, "", fmt.Errorf("conflicting refresh values: %s sets %q, %s sets %q; use --refresh to override", refreshFile, refresh, name, fileRefresh)
+			}
+			refresh, refreshFile = fileRefresh, name
+		}
+		conns = append(conns, fileConns...)
+	}
+	return conns, refresh, nil
+}
+
+// decodeConnectionsFile reads one directory member file. Unlike the top-level
+// config, a missing file here is always an error: files come from a glob of
+// files known to exist.
+func decodeConnectionsFile(path string) (refresh string, conns []Connection, err error) {
+	var disk struct {
+		Refresh     string       `yaml:"refresh"`
+		Connections []Connection `yaml:"connections"`
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return "", nil, errors.New("cannot read config file")
+	}
+	defer f.Close()
+	decoder := yaml.NewDecoder(f)
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&disk); err != nil {
+		if err == io.EOF {
+			return "", nil, errors.New("config file is empty")
+		}
+		return "", nil, errors.New("invalid config YAML: check field names and value types")
+	}
+	if decoder.Decode(new(any)) != io.EOF {
+		return "", nil, errors.New("invalid config YAML: trailing content")
+	}
+	return disk.Refresh, disk.Connections, nil
+}
+
+// validateConnections expands, validates, and enforces name uniqueness for
+// conns, resolving relative paths against base. origins records each name's
+// source file so cross-file duplicates can be reported; file identifies conns'
+// own source and is empty for a single config file, which keeps today's plain
+// "duplicate name" wording for that case.
+func validateConnections(conns []Connection, base string, origins map[string]string, file string) error {
+	for i := range conns {
+		c := &conns[i]
+		if strings.TrimSpace(c.Name) == "" {
+			return fmt.Errorf("connection %d: name is required", i+1)
+		}
+		if origin, dup := origins[c.Name]; dup {
+			if file == "" {
+				return fmt.Errorf("connection %d: duplicate name", i+1)
+			}
+			return fmt.Errorf("connection %d: duplicate name %q (already defined in %s)", i+1, c.Name, origin)
+		}
+		origins[c.Name] = file
+		if err := c.expand(base); err != nil {
+			return fmt.Errorf("connection %d: %w", i+1, err)
+		}
+		if err := c.Validate(); err != nil {
+			return fmt.Errorf("connection %d: %w", i+1, err)
+		}
+	}
+	return nil
 }
 
 // Validate checks endpoint, authentication, and TLS settings without connecting.
