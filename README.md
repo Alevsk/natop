@@ -202,6 +202,45 @@ is loaded and merged, in filename order:
   credentials alongside it.
 - An empty directory, or one merging to zero connections, is an error.
 
+## Scripting / health checks
+
+The interactive TUI needs a real TTY, which does not fit cron, CI, or a
+monitoring system checking hundreds of deployments. `--once` polls every
+configured connection exactly once, prints a report, and exits — no terminal
+required.
+
+```sh
+natop --config fleet.yaml --once                        # compact text report
+natop --config fleet.yaml --once --format json | jq      # structured for scripts
+natop --demo --once --format json                        # see the report shape; no server needed
+```
+
+`--format` (`text` or `json`, default `text`) controls the report shape.
+`text` prints one greppable `resource key=value ...` line per connection,
+stream, and consumer. `json` prints a single JSON array of connections, each
+with its streams and their consumers, using natop's own stable, snake_case
+field names — not a dump of the underlying NATS client library's types — so
+scripts are not coupled to an upstream shape that could change under them.
+
+Add health thresholds to turn `--once` into a pass/fail check:
+
+```sh
+natop --config fleet.yaml --once --max-pending 100000 || page-oncall
+natop --config fleet.yaml --once --max-ack-pending 5000 --max-redelivered 50
+```
+
+`--max-pending`, `--max-ack-pending`, and `--max-redelivered` (each a count,
+default `0` = unchecked) fail the run if any consumer's `NumPending`,
+`NumAckPending`, or `NumRedelivered` exceeds the given limit. Independently of
+thresholds, any connection that isn't `online` always counts as a failure — a
+fleet check that ignores dead connections isn't worth running. `--format` and
+the threshold flags only apply to `--once`; passing them otherwise is an error.
+
+Exit codes: `0` means the report succeeded and the fleet is healthy; `1`
+means either a threshold/connection breach was found (details go to stderr)
+or the tool itself failed. Genuine tool/config errors are printed with a
+`natop:` prefix; a routine "fleet is unhealthy" result is not.
+
 ## What the metrics mean
 
 - **Messages / bytes:** data currently stored in a stream.
