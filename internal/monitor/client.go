@@ -7,12 +7,18 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/alevsk/natop/internal/config"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
+
+// maxConcurrentConsumerLookups bounds in-flight consumer lookups per Fetch pass
+// so a deployment with hundreds of streams doesn't exhaust the outer 15s budget
+// waiting on them sequentially, without opening unbounded connections at once.
+const maxConcurrentConsumerLookups = 16
 
 // Client is owned by one polling worker. Only the NATS error callback runs
 // concurrently; its diagnostic is protected separately.
@@ -139,28 +145,38 @@ func (c *Client) Fetch(ctx context.Context, previous Snapshot) Snapshot {
 	for _, stream := range previous.Streams {
 		old[stream.Info.Config.Name] = stream
 	}
-	result.Streams = make([]Stream, 0, len(infos))
+	result.Streams = make([]Stream, len(infos))
 	result.Status = "online"
-	failed := 0
-	for _, info := range infos {
+	var failed atomic.Int32
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, maxConcurrentConsumerLookups)
+	for i, info := range infos {
 		stream := old[info.Config.Name]
 		// A recreated stream must not inherit consumers from its predecessor.
 		if stream.Info != nil && !stream.Info.Created.Equal(info.Created) {
 			stream = Stream{}
 		}
 		stream.Info, stream.Updated, stream.Error = info, time.Now(), ""
-		consumers, err := c.consumers(ctx, info.Config.Name)
-		if err != nil {
-			stream.Error = c.diagnostic(err)
-			failed++
-		} else {
-			stream.Consumers, stream.ConsumersUpdated = consumers, time.Now()
-		}
-		result.Streams = append(result.Streams, stream)
+		result.Streams[i] = stream
+
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int, name string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			consumers, err := c.consumers(ctx, name)
+			if err != nil {
+				result.Streams[i].Error = c.diagnostic(err)
+				failed.Add(1)
+			} else {
+				result.Streams[i].Consumers, result.Streams[i].ConsumersUpdated = consumers, time.Now()
+			}
+		}(i, info.Config.Name)
 	}
-	if failed > 0 {
+	wg.Wait()
+	if n := failed.Load(); n > 0 {
 		result.Status = "partial"
-		result.Error = fmt.Sprintf("Consumer metadata unavailable for %d stream(s); select the stream for details", failed)
+		result.Error = fmt.Sprintf("Consumer metadata unavailable for %d stream(s); select the stream for details", n)
 	} else {
 		result.Updated = time.Now()
 	}

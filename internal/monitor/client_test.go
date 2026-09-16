@@ -2,7 +2,9 @@ package monitor
 
 import (
 	"context"
+	"fmt"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -125,6 +127,63 @@ func TestFailedRefreshRetainsStaleData(t *testing.T) {
 	}
 	if len(bad.Streams) != 1 || !bad.Updated.Equal(good.Updated) {
 		t.Fatal("failure erased old snapshot or changed its timestamp")
+	}
+}
+
+// seedMany creates n streams named S00..Sn-1 so their sorted order is stable,
+// giving a durable consumer to every third one.
+func seedMany(t *testing.T, url string, n int) []string {
+	t.Helper()
+	nc, err := nats.Connect(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(nc.Close)
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	names := make([]string, n)
+	for i := range n {
+		name := fmt.Sprintf("S%02d", i)
+		names[i] = name
+		if _, err := js.CreateStream(ctx, jetstream.StreamConfig{Name: name, Subjects: []string{name + ".>"}, Storage: jetstream.MemoryStorage}); err != nil {
+			t.Fatal(err)
+		}
+		if i%3 == 0 {
+			if _, err := js.CreateConsumer(ctx, name, jetstream.ConsumerConfig{Durable: "worker", AckPolicy: jetstream.AckExplicitPolicy, AckWait: time.Hour}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	return names
+}
+
+func TestFetchHandlesManyStreamsConcurrently(t *testing.T) {
+	s := testServer(t, nil)
+	names := seedMany(t, s.ClientURL(), 24)
+	sort.Strings(names)
+	c := NewClient(config.Connection{Name: "local", URL: s.ClientURL()}, time.Second)
+	defer c.Close()
+	snapshot := c.Fetch(context.Background(), Snapshot{})
+	if snapshot.Error != "" || snapshot.Status != "online" {
+		t.Fatalf("fetch: %+v", snapshot)
+	}
+	if len(snapshot.Streams) != len(names) {
+		t.Fatalf("streams: got %d want %d", len(snapshot.Streams), len(names))
+	}
+	for i, stream := range snapshot.Streams {
+		if stream.Info.Config.Name != names[i] {
+			t.Fatalf("stream %d out of order: got %s want %s", i, stream.Info.Config.Name, names[i])
+		}
+		if stream.Error != "" {
+			t.Fatalf("stream %s: %s", names[i], stream.Error)
+		}
+		wantConsumers := i%3 == 0
+		if hasConsumers := len(stream.Consumers) == 1; hasConsumers != wantConsumers {
+			t.Fatalf("stream %s: got %d consumers, want consumer=%v", names[i], len(stream.Consumers), wantConsumers)
+		}
 	}
 }
 
