@@ -152,6 +152,36 @@ make docker-multi MULTI_CONFIG=/path/to/connections.yaml \
   DOCKER_ARGS="--user $(id -u):$(id -g) -v /path/to/account.creds:/config/account.creds:ro"
 ```
 
+### Fleet configuration
+
+Managing hundreds of connections in one file gets unwieldy. Point `--config`
+at a directory instead of a file to split them across many small, git-managed
+files — one per team, for example:
+
+```sh
+natop --config examples/fleet
+```
+
+```
+examples/fleet/
+├── data.yaml
+└── platform.yaml
+```
+
+Every `*.yaml` and `*.yml` file directly inside the directory (not recursive)
+is loaded and merged, in filename order:
+
+- Connection names must be unique across the **entire** merged set, not just
+  within one file. A duplicate names both files, e.g. `team-b.yaml: connection
+  2: duplicate name "orders" (already defined in team-a.yaml)`.
+- Each file's `refresh` is optional. If none set it, the usual default applies.
+  If files disagree and `--refresh` wasn't given to disambiguate, that's an
+  error naming the conflicting files; pass `--refresh` to override.
+- Relative `credentials`, `tls_ca`, `tls_cert`, and `tls_key` paths resolve
+  against **that file's own directory**, so each team's file can ship its own
+  credentials alongside it.
+- An empty directory, or one merging to zero connections, is an error.
+
 ## What the metrics mean
 
 - **Messages / bytes:** data currently stored in a stream.

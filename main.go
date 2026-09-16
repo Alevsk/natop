@@ -56,12 +56,12 @@ func run() error {
 	var demo, showVersion bool
 	flags.StringVar(&server, "s", "", "NATS server URL (overrides config)")
 	flags.StringVar(&server, "server", "", "NATS server URL (same as -s)")
-	flags.StringVar(&path, "config", "", "path to named-connections YAML config")
+	flags.StringVar(&path, "config", "", "path to a named-connections YAML config file, or a directory of them")
 	flags.StringVar(&refresh, "refresh", "", "refresh interval, e.g. 2s (250ms–1h)")
 	flags.BoolVar(&demo, "demo", false, "explore the UI with sample data; no server needed")
 	flags.BoolVar(&showVersion, "version", false, "print version and exit")
 	flags.Usage = func() {
-		fmt.Fprintln(flags.Output(), "natop — a live JetStream dashboard\n\nUsage: natop [options]\n\nExamples:\n  natop -s nats://localhost:4222\n  natop --config connections.yaml\n  natop --demo\n\nOptions:")
+		fmt.Fprintln(flags.Output(), "natop — a live JetStream dashboard\n\nUsage: natop [options]\n\nExamples:\n  natop -s nats://localhost:4222\n  natop --config connections.yaml\n  natop --config examples/fleet\n  natop --demo\n\nOptions:")
 		flags.PrintDefaults()
 	}
 	if err := flags.Parse(os.Args[1:]); err != nil {
