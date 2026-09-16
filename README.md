@@ -2,7 +2,9 @@
 
 A small, keyboard-driven NATS JetStream dashboard. One Go binary shows live
 streams and consumer backlogs across multiple deployments, with filtering,
-sorting, drill-down, and connection status.
+sorting, drill-down, and connection status. Point it at a directory of
+connection files to watch a whole fleet, or run it headless with `--once`
+for cron/CI health checks.
 
 <video src="https://github.com/user-attachments/assets/e73178b1-957c-4052-96f7-b7ecc0cc4b5a" controls="controls" muted="muted" style="max-height:640px;"></video>
 
@@ -15,7 +17,7 @@ sorting, drill-down, and connection status.
  │ production  ORDERS            File            5      1200        │
  │ CONNECTION  STREAM           STORAGE  CONSUMERS  MESSAGES  ...   │
  └─────────────────────────────────────────────────────────────────┘
- Enter open  d details  / filter  c connection  s sort  r refresh
+ Enter open  d details (e export)  / filter  ! issues  c connection  s sort  r refresh
 ```
 
 ## Installation
