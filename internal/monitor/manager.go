@@ -44,6 +44,29 @@ func (m *Manager) Refresh() {
 	}
 }
 
+// Once performs exactly one fetch pass per connection, concurrently, and
+// returns the resulting snapshots in the connections' configured order. It
+// has no ticker loop, unlike Start; it is for --once, not the live TUI.
+func (m *Manager) Once(ctx context.Context) []Snapshot {
+	snapshots := make([]Snapshot, len(m.config.Connections))
+	var wg sync.WaitGroup
+	for i, connection := range m.config.Connections {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if m.demo {
+				snapshots[i] = demoSnapshot(connection.Name, 0)
+				return
+			}
+			client := NewClient(connection, 2*time.Second)
+			defer client.Close()
+			snapshots[i] = client.Fetch(ctx, Snapshot{Name: connection.Name, URL: connection.SafeURL(), Status: "connecting"})
+		}()
+	}
+	wg.Wait()
+	return snapshots
+}
+
 // Start must be called once. Cancellation closes all clients and both channels.
 func (m *Manager) Start(ctx context.Context) <-chan Snapshot {
 	updates := make(chan Snapshot, len(m.config.Connections)*2)
