@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime/debug"
 	"syscall"
 
@@ -59,13 +60,14 @@ func main() {
 // nonzero code with a nil error, so it never gets misreported as a tool bug.
 func run() (int, error) {
 	flags := flag.NewFlagSet("natop", flag.ContinueOnError)
-	var server, path, refresh, format string
+	var server, path, refresh, format, exportDir string
 	var demo, showVersion, once bool
 	var maxPending, maxAckPending, maxRedelivered uint64
 	flags.StringVar(&server, "s", "", "NATS server URL (overrides config)")
 	flags.StringVar(&server, "server", "", "NATS server URL (same as -s)")
 	flags.StringVar(&path, "config", "", "path to a named-connections YAML config file, or a directory of them")
 	flags.StringVar(&refresh, "refresh", "", "refresh interval, e.g. 2s (250ms–1h)")
+	flags.StringVar(&exportDir, "export-dir", filepath.Join(os.TempDir(), "natop"), "directory for metadata exported with 'e' in details")
 	flags.BoolVar(&demo, "demo", false, "explore the UI with sample data; no server needed")
 	flags.BoolVar(&showVersion, "version", false, "print version and exit")
 	flags.BoolVar(&once, "once", false, "poll every connection once, print a report, and exit; no TTY required (for cron/CI/monitoring)")
@@ -129,7 +131,7 @@ func run() (int, error) {
 		m = monitor.NewDemo(cfg.Refresh)
 	}
 	updates := m.Start(ctx)
-	err = ui.New(m.Initial(), demo, m.Refresh).Run(ctx, updates)
+	err = ui.New(m.Initial(), demo, m.Refresh).SetExportDir(exportDir).Run(ctx, updates)
 	cancel()
 	<-m.Done()
 	return 0, err

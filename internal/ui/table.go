@@ -187,7 +187,7 @@ func (u *UI) render() {
 		filter = " · filter: " + safe(u.filter)
 	}
 	u.summary.SetText(fmt.Sprintf(" [gray]%s · %d rows · sort: %s%s", connection, len(u.rows), sortName, filter))
-	u.hints.SetText(" [#67e8f9]Enter[-] open [#67e8f9]d[-] details [#67e8f9]/[-] filter [#67e8f9]c[-] connection [#67e8f9]s[-] sort [#67e8f9]r[-] refresh [#67e8f9]?[-] help [#67e8f9]q[-] quit")
+	u.hints.SetText(" [#67e8f9]Enter[-] open [#67e8f9]d[-] details ([#67e8f9]e[-] export) [#67e8f9]/[-] filter [#67e8f9]c[-] connection [#67e8f9]s[-] sort [#67e8f9]r[-] refresh [#67e8f9]?[-] help [#67e8f9]q[-] quit")
 	u.renderStatus()
 }
 

@@ -30,6 +30,7 @@ type UI struct {
 	layout                                           *tview.Flex
 	header, summary, status, hints                   *tview.TextView
 	table, chooser                                   *tview.Table
+	overlayView                                      *tview.TextView
 	input                                            *tview.InputField
 	snapshots                                        map[string]monitor.Snapshot
 	rows                                             []row
@@ -42,6 +43,9 @@ type UI struct {
 	demo                                             bool
 	refresh                                          func()
 	wakePending                                      atomic.Bool
+	exportDir                                        string
+	exportConnection, exportName                     string
+	exportData                                       []byte
 }
 
 var (
@@ -84,6 +88,14 @@ func New(initial []monitor.Snapshot, demo bool, refresh func()) *UI {
 	u.pages = tview.NewPages().AddPage("main", u.layout, true, true)
 	u.app.SetRoot(u.pages, true).SetFocus(u.table).EnablePaste(true).SetInputCapture(u.key)
 	u.render()
+	return u
+}
+
+// SetExportDir overrides where the export key ('e' in details) writes metadata
+// JSON. Callers must set it before Run; tests use a t.TempDir() here instead
+// of hardcoding the OS temp directory.
+func (u *UI) SetExportDir(dir string) *UI {
+	u.exportDir = dir
 	return u
 }
 
@@ -172,6 +184,10 @@ func (u *UI) key(e *tcell.EventKey) *tcell.EventKey {
 			u.app.Stop()
 			return nil
 		}
+		if e.Rune() == 'e' && u.exportData != nil {
+			u.exportDetails()
+			return nil
+		}
 		return e
 	}
 	if e.Key() == tcell.KeyEscape {
@@ -242,6 +258,8 @@ func (u *UI) changeView(v view) {
 func (u *UI) closeOverlay() {
 	u.pages.RemovePage("overlay")
 	u.overlay = false
+	u.overlayView = nil
+	u.exportData = nil
 	u.app.SetFocus(u.table)
 }
 
