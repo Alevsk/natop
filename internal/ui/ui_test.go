@@ -91,6 +91,72 @@ func TestUnavailableDataIsVisibleAndEmptySnapshotsClearRows(t *testing.T) {
 	}
 }
 
+func connectionOrder(u *UI) string {
+	ids := make([]string, len(u.rows))
+	for i, r := range u.rows {
+		ids[i] = r.connection
+	}
+	return strings.Join(ids, ",")
+}
+
+func TestConnectionsSortByStatusAndStaleness(t *testing.T) {
+	now := time.Now()
+	alpha := sample("alpha", 1) // online, fresh: rank 0, staleness ~0
+	alpha.Updated = now
+	bravo := sample("bravo", 1) // connecting, stalest: rank 1
+	bravo.Status, bravo.Updated = "connecting", now.Add(-2*time.Minute)
+	charlie := sample("charlie", 1) // partial: rank 2
+	charlie.Status, charlie.Updated = "partial", now.Add(-time.Minute)
+	delta := sample("delta", 1) // offline, worst rank but fresher than bravo/charlie
+	delta.Status, delta.Updated = "offline", now.Add(-30*time.Second)
+
+	u := New([]monitor.Snapshot{alpha, bravo, charlie, delta}, false, nil)
+	u.changeView(connectionsView)
+
+	press(u, tcell.KeyRune, 's') // status ↓: worst status first
+	if got, want := connectionOrder(u), "delta,charlie,bravo,alpha"; got != want {
+		t.Fatalf("status sort = %q, want %q", got, want)
+	}
+
+	press(u, tcell.KeyRune, 's') // stale ↓: longest time since Updated first
+	if got, want := connectionOrder(u), "bravo,charlie,delta,alpha"; got != want {
+		t.Fatalf("stale sort = %q, want %q", got, want)
+	}
+}
+
+func TestOnlyIssuesToggleHidesHealthyRowsAndComposesWithFilter(t *testing.T) {
+	healthy := sample("healthy-a", 1)
+	broken := sample("broken-a", 1)
+	broken.Status = "offline"
+	other := sample("healthy-b", 1) // excluded by the "-a" filter below
+
+	u := New([]monitor.Snapshot{healthy, broken, other}, false, nil)
+
+	applyFilter := func(text string) {
+		press(u, tcell.KeyRune, '/')
+		for _, ch := range text {
+			press(u, tcell.KeyRune, ch)
+		}
+		press(u, tcell.KeyEnter, 0)
+	}
+
+	for _, v := range []view{streamsView, consumersView, connectionsView} {
+		u.changeView(v) // clears the filter, so it must be reapplied per view
+		applyFilter("-a")
+		if got, want := connectionOrder(u), "broken-a,healthy-a"; got != want {
+			t.Fatalf("view %d: filter alone = %q, want %q", v, got, want)
+		}
+		press(u, tcell.KeyRune, '!') // issues only
+		if got, want := connectionOrder(u), "broken-a"; got != want {
+			t.Fatalf("view %d: issues-only + filter = %q, want %q", v, got, want)
+		}
+		if !strings.Contains(u.summary.GetText(true), "issues only") {
+			t.Fatalf("view %d: summary does not reflect issues-only toggle", v)
+		}
+		press(u, tcell.KeyRune, '!') // reset for the next view's iteration
+	}
+}
+
 func TestTextCannotInjectTerminalMarkup(t *testing.T) {
 	got := safe("[red]name\x1b[2J\nnext\x07")
 	if strings.ContainsAny(got, "\x1b\n\x07") || tview.TaggedStringWidth(got) < len("[red]namenext") {

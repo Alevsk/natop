@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/alevsk/natop/internal/monitor"
 	"github.com/gdamore/tcell/v2"
@@ -51,9 +52,37 @@ func (u *UI) orderedSnapshots() []monitor.Snapshot {
 
 func (u *UI) sortCount() int {
 	if u.view == connectionsView {
-		return 1
+		return 3
 	}
 	return 4
+}
+
+// connectionRank orders statuses worst-first: online is healthy, everything
+// else needs attention in increasing severity.
+func connectionRank(status string) uint64 {
+	switch status {
+	case "online":
+		return 0
+	case "connecting":
+		return 1
+	case "partial":
+		return 2
+	default:
+		return 3
+	}
+}
+
+func staleness(t time.Time) uint64 {
+	if d := time.Since(t); d > 0 {
+		return uint64(d)
+	}
+	return 0
+}
+
+// isIssueState matches the same "stale"/"partial" substrings used to color a
+// row's state cell yellow, so issues-only filtering agrees with what's shown.
+func isIssueState(state string) bool {
+	return strings.Contains(state, "stale") || strings.Contains(state, "partial")
 }
 
 func (u *UI) render() {
@@ -77,6 +106,7 @@ func (u *UI) render() {
 	case connectionsView:
 		title = "Connections"
 		headers = []string{"CONNECTION", "SERVER", "STATUS", "LAST SUCCESS", "ERROR"}
+		sortName = []string{"name", "status ↓", "stale ↓"}[u.sort]
 	}
 	online, issues := 0, 0
 	for _, snapshot := range u.orderedSnapshots() {
@@ -89,7 +119,8 @@ func (u *UI) render() {
 			continue
 		}
 		if u.view == connectionsView {
-			u.addRow(row{id: snapshot.Name, connection: snapshot.Name, cells: []string{snapshot.Name, snapshot.URL, snapshot.Status, age(snapshot.Updated), snapshot.Error}})
+			u.addRow(row{id: snapshot.Name, connection: snapshot.Name, cells: []string{snapshot.Name, snapshot.URL, snapshot.Status, age(snapshot.Updated), snapshot.Error},
+				values: []uint64{connectionRank(snapshot.Status), staleness(snapshot.Updated)}})
 			continue
 		}
 		for _, stream := range snapshot.Streams {
@@ -148,7 +179,7 @@ func (u *UI) render() {
 	for i, r := range u.rows {
 		for j, value := range r.cells {
 			color := foreground
-			if j == len(r.cells)-1 && (strings.Contains(value, "stale") || strings.Contains(value, "partial")) {
+			if j == len(r.cells)-1 && isIssueState(value) {
 				color = tcell.ColorYellow
 			}
 			cell := tview.NewTableCell(" " + safe(value) + " ").SetTextColor(color).SetMaxWidth(36)
@@ -186,14 +217,27 @@ func (u *UI) render() {
 	if u.filter != "" {
 		filter = " · filter: " + safe(u.filter)
 	}
-	u.summary.SetText(fmt.Sprintf(" [gray]%s · %d rows · sort: %s%s", connection, len(u.rows), sortName, filter))
-	u.hints.SetText(" [#67e8f9]Enter[-] open [#67e8f9]d[-] details ([#67e8f9]e[-] export) [#67e8f9]/[-] filter [#67e8f9]c[-] connection [#67e8f9]s[-] sort [#67e8f9]r[-] refresh [#67e8f9]?[-] help [#67e8f9]q[-] quit")
+	onlyIssues := ""
+	if u.onlyIssues {
+		onlyIssues = " · issues only"
+	}
+	u.summary.SetText(fmt.Sprintf(" [gray]%s · %d rows · sort: %s%s%s", connection, len(u.rows), sortName, filter, onlyIssues))
+	u.hints.SetText(" [#67e8f9]Enter[-] open [#67e8f9]d[-] details ([#67e8f9]e[-] export) [#67e8f9]/[-] filter [#67e8f9]![-] issues [#67e8f9]c[-] connection [#67e8f9]s[-] sort [#67e8f9]r[-] refresh [#67e8f9]?[-] help [#67e8f9]q[-] quit")
 	u.renderStatus()
 }
 
 func (u *UI) addRow(r row) {
 	if u.filter != "" && !strings.Contains(strings.ToLower(strings.Join(r.cells, " ")), strings.ToLower(u.filter)) {
 		return
+	}
+	if u.onlyIssues {
+		if u.view == connectionsView {
+			if r.cells[2] == "online" {
+				return
+			}
+		} else if !isIssueState(r.cells[len(r.cells)-1]) {
+			return
+		}
 	}
 	u.rows = append(u.rows, r)
 }
