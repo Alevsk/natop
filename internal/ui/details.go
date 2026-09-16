@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -55,7 +56,7 @@ func (u *UI) showDetails() {
 	}
 	u.exportConnection, u.exportName, u.exportData = "", "", nil
 	if value != nil {
-		data, err := json.MarshalIndent(value, "", "  ")
+		data, err := marshalDetails(value)
 		if err == nil {
 			b.WriteString("\n [#67e8f9]Full metadata (snapshot when opened; reopen to refresh · e to export)[-]\n")
 			b.WriteString(colorizeJSON(data))
@@ -66,6 +67,21 @@ func (u *UI) showDetails() {
 		fmt.Fprintf(&b, "\n Streams in last snapshot: %d\n\n If a Docker hostname cannot resolve, run on its Docker network or use\n a published host port. Press c to change the connection filter.\n", len(snapshot.Streams))
 	}
 	u.showText(title, b.String())
+}
+
+// marshalDetails renders value as indented JSON exactly like
+// json.MarshalIndent(value, "", "  "), except HTML-escaping is disabled so
+// subjects/filters containing '<', '>', or '&' survive intact in both the
+// colorized overlay and whatever gets exported to disk.
+func marshalDetails(value any) ([]byte, error) {
+	var buf strings.Builder
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(value); err != nil {
+		return nil, err
+	}
+	return []byte(strings.TrimSuffix(buf.String(), "\n")), nil
 }
 
 // exportDetails writes the raw (uncolored) JSON captured by the open details
@@ -106,27 +122,60 @@ var (
 )
 
 var (
-	jsonLineRe    = regexp.MustCompile(`^(\s*)(?:("(?:[^"\\]|\\.)*")(\s*:\s*))?(.*)$`)
-	jsonStringRe  = regexp.MustCompile(`^"(?:[^"\\]|\\.)*",?$`)
-	jsonNumberRe  = regexp.MustCompile(`^-?\d+(\.\d+)?([eE][+-]?\d+)?,?$`)
-	jsonLiteralRe = regexp.MustCompile(`^(?:true|false|null),?$`)
+	jsonLineRe     = regexp.MustCompile(`^(\s*)(?:("(?:[^"\\]|\\.)*")(\s*:\s*))?(.*)$`)
+	jsonStringRe   = regexp.MustCompile(`^"(?:[^"\\]|\\.)*",?$`)
+	jsonNumberRe   = regexp.MustCompile(`^-?\d+(\.\d+)?([eE][+-]?\d+)?,?$`)
+	jsonLiteralRe  = regexp.MustCompile(`^(?:true|false|null),?$`)
+	jsonZeroTimeRe = regexp.MustCompile(`^"0001-01-01T00:00:00Z",?$`)
 )
 
-// colorizeJSON syntax-highlights already-indented json.MarshalIndent output
-// for the details overlay. Indentation and punctuation come from Go's own
-// encoder and are structural, not attacker-controlled, so they are written
-// verbatim; every other token originates in the untrusted JSON payload and
-// is passed through safe() before being wrapped in our own (trusted) color
-// tags, exactly like the plain-text rendering it replaces.
+// durationJSONKeys are the json field names of every time.Duration field on
+// jetstream.StreamConfig, jetstream.StreamState, jetstream.ConsumerConfig,
+// jetstream.ConsumerInfo, and the nested types they embed (StreamConsumerLimits,
+// ClusterInfo/PeerInfo, StreamSourceInfo), per nats-io/nats.go@v1.53.1's
+// jetstream package. Matched by bare key name rather than JSON path, so this
+// is a display-only annotation and never touches the exported bytes; the
+// trade-off is that an unrelated field sharing one of these names (e.g. a
+// subject literally named "active") would also get annotated.
+var durationJSONKeys = map[string]bool{
+	"max_age":                   true, // StreamConfig.MaxAge
+	"duplicate_window":          true, // StreamConfig.Duplicates
+	"subject_delete_marker_ttl": true, // StreamConfig.SubjectDeleteMarkerTTL
+	"inactive_threshold":        true, // ConsumerConfig / StreamConsumerLimits InactiveThreshold
+	"active":                    true, // PeerInfo.Active, StreamSourceInfo.Active
+	"ack_wait":                  true, // ConsumerConfig.AckWait
+	"max_expires":               true, // ConsumerConfig.MaxRequestExpires
+	"priority_timeout":          true, // ConsumerConfig.PinnedTTL
+	"idle_heartbeat":            true, // ConsumerConfig.IdleHeartbeat
+	"pause_remaining":           true, // ConsumerInfo.PauseRemaining
+}
+
+// durationArrayJSONKeys are []time.Duration fields (currently only
+// ConsumerConfig.BackOff); every bare-number line between the matching "["
+// and "]" gets the same annotation as a scalar duration field.
+var durationArrayJSONKeys = map[string]bool{
+	"backoff": true, // ConsumerConfig.BackOff
+}
+
+// colorizeJSON syntax-highlights already-indented json.MarshalIndent-style
+// output for the details overlay. Indentation and punctuation come from Go's
+// own encoder and are structural, not attacker-controlled, so they are
+// written verbatim; every other token originates in the untrusted JSON
+// payload and is passed through safe() before being wrapped in our own
+// (trusted) color tags, exactly like the plain-text rendering it replaces.
+// Known duration fields and the zero time.Time literal get a dimmed,
+// additive human-readable annotation; the raw value is never altered, since
+// this same []byte is also written verbatim by the export feature.
 func colorizeJSON(data []byte) string {
 	lines := strings.Split(string(data), "\n")
+	inDurationArray := false
 	for i, line := range lines {
-		lines[i] = " " + colorizeJSONLine(line)
+		lines[i] = " " + colorizeJSONLine(line, &inDurationArray)
 	}
 	return strings.Join(lines, "\n")
 }
 
-func colorizeJSONLine(line string) string {
+func colorizeJSONLine(line string, inDurationArray *bool) string {
 	m := jsonLineRe.FindStringSubmatch(line)
 	if m == nil {
 		return safe(line)
@@ -141,7 +190,35 @@ func colorizeJSONLine(line string) string {
 		b.WriteString(sep)
 	}
 	b.WriteString(colorizeJSONValue(value))
+
+	name := strings.Trim(key, `"`)
+	switch {
+	case durationArrayJSONKeys[name] && value == "[":
+		*inDurationArray = true
+	case *inDurationArray && (value == "]" || value == "],"):
+		*inDurationArray = false
+	case key != "" && durationJSONKeys[name] && jsonNumberRe.MatchString(value):
+		b.WriteString(durationAnnotation(value))
+	case key == "" && *inDurationArray && jsonNumberRe.MatchString(value):
+		b.WriteString(durationAnnotation(value))
+	case jsonZeroTimeRe.MatchString(value):
+		b.WriteString(annotate("never"))
+	}
 	return b.String()
+}
+
+// annotate renders a dimmed "(text)" suffix appended after an already
+// colorized value, e.g. "5000000000  [muted](5s)[-]".
+func annotate(text string) string {
+	return "  " + colorTag(muted) + "(" + text + ")[-]"
+}
+
+func durationAnnotation(value string) string {
+	n, err := strconv.ParseInt(strings.TrimSuffix(value, ","), 10, 64)
+	if err != nil {
+		return ""
+	}
+	return annotate(time.Duration(n).String())
 }
 
 func colorizeJSONValue(v string) string {
