@@ -43,6 +43,7 @@ type UI struct {
 	onlyIssues                                       bool
 	demo                                             bool
 	refresh                                          func()
+	manager                                          *monitor.Manager
 	wakePending                                      atomic.Bool
 	exportDir                                        string
 	exportConnection, exportName                     string
@@ -56,9 +57,9 @@ var (
 	muted      = tcell.NewHexColor(0x94a3b8)
 )
 
-func New(initial []monitor.Snapshot, demo bool, refresh func()) *UI {
-	u := &UI{app: tview.NewApplication(), snapshots: map[string]monitor.Snapshot{}, demo: demo, refresh: refresh}
-	for _, s := range initial {
+func New(m *monitor.Manager) *UI {
+	u := &UI{app: tview.NewApplication(), snapshots: map[string]monitor.Snapshot{}, demo: m.IsDemo(), refresh: m.Refresh, manager: m}
+	for _, s := range m.Initial() {
 		u.snapshots[s.Name] = s
 	}
 	text := func() *tview.TextView {
@@ -83,7 +84,7 @@ func New(initial []monitor.Snapshot, demo bool, refresh func()) *UI {
 		u.closeFilter()
 	})
 	u.layout = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(u.header, 2, 0, false).AddItem(u.summary, 1, 0, false).
+		AddItem(u.header, 2, 0, false).AddItem(tview.NewTextView().SetBackgroundColor(background), 1, 0, false).
 		AddItem(u.table, 0, 1, true).AddItem(u.status, 2, 0, false).AddItem(u.hints, 1, 0, false)
 	u.layout.SetBackgroundColor(background)
 	u.pages = tview.NewPages().AddPage("main", u.layout, true, true)
@@ -229,6 +230,8 @@ func (u *UI) key(e *tcell.EventKey) *tcell.EventKey {
 		u.chooseConnection()
 	case 'd':
 		u.showDetails()
+	case 'm':
+		u.showMessages()
 	case 's':
 		u.sort = (u.sort + 1) % u.sortCount()
 		u.render()
@@ -295,9 +298,9 @@ func (u *UI) chooseConnection() {
 		u.closeOverlay()
 		u.render()
 	})
-	u.overlay = true
-	u.pages.AddPage("overlay", u.chooser, true, true)
-	u.app.SetFocus(u.chooser)
+	 
+	u.openOverlay(u.chooser, u.summary)
+	 
 }
 
 func safe(s string) string {
@@ -352,4 +355,22 @@ func (u *UI) renderStatus() {
 		message += "\n [yellow]" + safe(r.stream.Error)
 	}
 	u.status.SetText(message)
+}
+
+func (u *UI) openOverlay(w tview.Primitive, summary tview.Primitive) {
+	u.overlay = true
+	 
+	if summary == nil {
+		summary = tview.NewTextView().SetBackgroundColor(background)
+	}
+	
+	overlayLayout := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(u.header, 2, 0, false).
+		AddItem(summary, 1, 0, false).
+		AddItem(w, 0, 1, true).
+		AddItem(u.status, 2, 0, false).
+		AddItem(u.hints, 1, 0, false)
+
+	u.pages.AddPage("overlay", overlayLayout, true, true)
+	u.app.SetFocus(w)
 }

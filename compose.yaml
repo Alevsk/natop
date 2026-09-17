@@ -1,5 +1,6 @@
 services:
   natop:
+    build: .
     image: ${NATOP_IMAGE:-natop:local}
     stdin_open: true
     tty: true

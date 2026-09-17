@@ -234,7 +234,7 @@ func (u *UI) render() {
 		onlyIssues = " · issues only"
 	}
 	u.summary.SetText(fmt.Sprintf(" [gray]%s · %d rows · sort: %s%s%s", connection, len(u.rows), sortName, filter, onlyIssues))
-	u.hints.SetText(" [#67e8f9]Enter[-] open [#67e8f9]d[-] details ([#67e8f9]e[-] export) [#67e8f9]/[-] filter [#67e8f9]![-] issues [#67e8f9]c[-] connection [#67e8f9]s[-] sort [#67e8f9]r[-] refresh [#67e8f9]?[-] help [#67e8f9]q[-] quit")
+	u.hints.SetText(" [#67e8f9]Enter[-] drill down [#67e8f9]d[-] details ([#67e8f9]e[-] export) [#67e8f9]/[-] filter [#67e8f9]![-] issues [#67e8f9]c[-] connection [#67e8f9]s[-] sort [#67e8f9]r[-] refresh [#67e8f9]?[-] help [#67e8f9]q[-] quit")
 	u.renderStatus()
 }
 
@@ -259,16 +259,18 @@ func (u *UI) openSelected() {
 	if r == nil {
 		return
 	}
-	if u.view != streamsView {
+	if u.view == streamsView {
+		u.backID = r.id
+		u.scopeConnection, u.scopeStream = r.connection, r.stream.Info.Config.Name
+		u.view, u.sort = consumersView, 0
+		u.input.SetText("")
+		u.table.ScrollToBeginning().Select(1, 0)
+		u.render()
+	} else if u.view == consumersView {
+		u.showMessages()
+	} else {
 		u.showDetails()
-		return
 	}
-	u.backID = r.id
-	u.scopeConnection, u.scopeStream = r.connection, r.stream.Info.Config.Name
-	u.view, u.sort = consumersView, 0
-	u.input.SetText("")
-	u.table.ScrollToBeginning().Select(1, 0)
-	u.render()
 }
 
 func number(n uint64) string {

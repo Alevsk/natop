@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alevsk/natop/internal/config"
 	"github.com/alevsk/natop/internal/monitor"
 	"github.com/gdamore/tcell/v2"
 	"github.com/nats-io/nats.go/jetstream"
@@ -71,7 +72,11 @@ func TestColorizeJSONHighlightsKeysStringsAndNumbers(t *testing.T) {
 func TestExportWritesRawJSONForOpenDetails(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "exports")
 	snap := sample("prod", 5)
-	u := New([]monitor.Snapshot{snap}, false, nil).SetExportDir(dir)
+	m := monitor.NewManager(config.Config{})
+	u := New(m).SetExportDir(dir)
+	for _, s := range []monitor.Snapshot{snap} {
+		u.Update(s)
+	}
 	u.table.Select(1, 0)
 	press(u, tcell.KeyRune, 'd')
 	if !u.overlay || u.exportData == nil {
@@ -108,7 +113,11 @@ func TestExportWritesRawJSONForOpenDetails(t *testing.T) {
 
 func TestExportSkipsRowsWithoutMetadata(t *testing.T) {
 	dir := t.TempDir()
-	u := New([]monitor.Snapshot{sample("prod", 1)}, false, nil).SetExportDir(dir)
+	m := monitor.NewManager(config.Config{})
+	u := New(m).SetExportDir(dir)
+	for _, s := range []monitor.Snapshot{sample("prod", 1)} {
+		u.Update(s)
+	}
 	u.changeView(connectionsView)
 	u.table.Select(1, 0)
 	press(u, tcell.KeyRune, 'd')
@@ -127,7 +136,11 @@ func TestExportSkipsRowsWithoutMetadata(t *testing.T) {
 }
 
 func TestDetailsOverlayDoesNotHTMLEscapeSubjects(t *testing.T) {
-	u := New([]monitor.Snapshot{sample("prod", 5)}, false, nil) // stream subject is "work.>"
+	m := monitor.NewManager(config.Config{})
+	u := New(m) // stream subject is "work.>"
+	for _, s := range []monitor.Snapshot{sample("prod", 5)} {
+		u.Update(s)
+	}
 	u.table.Select(1, 0)
 	press(u, tcell.KeyRune, 'd')
 	text := u.overlayView.GetText(true)

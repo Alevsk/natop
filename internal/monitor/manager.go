@@ -24,6 +24,8 @@ func NewManager(cfg config.Config) *Manager {
 	return m
 }
 
+func (m *Manager) IsDemo() bool { return m.demo }
+
 func (m *Manager) Done() <-chan struct{} { return m.done }
 
 func (m *Manager) Initial() []Snapshot {

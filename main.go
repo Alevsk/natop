@@ -131,7 +131,7 @@ func run() (int, error) {
 		m = monitor.NewDemo(cfg.Refresh)
 	}
 	updates := m.Start(ctx)
-	err = ui.New(m.Initial(), demo, m.Refresh).SetExportDir(exportDir).Run(ctx, updates)
+	err = ui.New(m).SetExportDir(exportDir).Run(ctx, updates)
 	cancel()
 	<-m.Done()
 	return 0, err

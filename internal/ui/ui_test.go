@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alevsk/natop/internal/config"
 	"github.com/alevsk/natop/internal/monitor"
 	"github.com/gdamore/tcell/v2"
 	"github.com/nats-io/nats.go/jetstream"
@@ -31,7 +32,11 @@ func press(u *UI, key tcell.Key, ch rune) {
 }
 
 func TestNavigationKeepsSameNamedStreamsSeparate(t *testing.T) {
-	u := New([]monitor.Snapshot{sample("one", 1), sample("two", 7)}, false, nil)
+	m := monitor.NewManager(config.Config{})
+	u := New(m)
+	for _, s := range []monitor.Snapshot{sample("one", 1), sample("two", 7)} {
+		u.Update(s)
+	}
 	if len(u.rows) != 2 {
 		t.Fatalf("rows = %d", len(u.rows))
 	}
@@ -52,7 +57,11 @@ func TestNavigationKeepsSameNamedStreamsSeparate(t *testing.T) {
 }
 
 func TestFilterInputDoesNotTriggerShortcuts(t *testing.T) {
-	u := New([]monitor.Snapshot{sample("query", 3), sample("reelify", 0)}, false, nil)
+	m := monitor.NewManager(config.Config{})
+	u := New(m)
+	for _, s := range []monitor.Snapshot{sample("query", 3), sample("reelify", 0)} {
+		u.Update(s)
+	}
 	press(u, tcell.KeyRune, '/')
 	for _, ch := range "query" {
 		press(u, tcell.KeyRune, ch)
@@ -75,7 +84,11 @@ func TestFilterInputDoesNotTriggerShortcuts(t *testing.T) {
 
 func TestUnavailableDataIsVisibleAndEmptySnapshotsClearRows(t *testing.T) {
 	s := sample("local", 3)
-	u := New([]monitor.Snapshot{s}, false, nil)
+	m := monitor.NewManager(config.Config{})
+	u := New(m)
+	for _, s := range []monitor.Snapshot{s} {
+		u.Update(s)
+	}
 	s.Status, s.Error = "offline", "connection refused"
 	u.Update(s)
 	if len(u.rows) != 1 || !strings.Contains(u.rows[0].cells[len(u.rows[0].cells)-1], "stale") {
@@ -110,7 +123,11 @@ func TestConnectionsSortByStatusAndStaleness(t *testing.T) {
 	delta := sample("delta", 1) // offline, worst rank but fresher than bravo/charlie
 	delta.Status, delta.Updated = "offline", now.Add(-30*time.Second)
 
-	u := New([]monitor.Snapshot{alpha, bravo, charlie, delta}, false, nil)
+	m := monitor.NewManager(config.Config{})
+	u := New(m)
+	for _, s := range []monitor.Snapshot{alpha, bravo, charlie, delta} {
+		u.Update(s)
+	}
 	u.changeView(connectionsView)
 
 	press(u, tcell.KeyRune, 's') // status ↓: worst status first
@@ -130,7 +147,11 @@ func TestOnlyIssuesToggleHidesHealthyRowsAndComposesWithFilter(t *testing.T) {
 	broken.Status = "offline"
 	other := sample("healthy-b", 1) // excluded by the "-a" filter below
 
-	u := New([]monitor.Snapshot{healthy, broken, other}, false, nil)
+	m := monitor.NewManager(config.Config{})
+	u := New(m)
+	for _, s := range []monitor.Snapshot{healthy, broken, other} {
+		u.Update(s)
+	}
 
 	applyFilter := func(text string) {
 		press(u, tcell.KeyRune, '/')
@@ -165,7 +186,11 @@ func TestTextCannotInjectTerminalMarkup(t *testing.T) {
 }
 
 func TestSimulationScreenLiveUpdatesAndCancellation(t *testing.T) {
-	u := New([]monitor.Snapshot{{Name: "test", Status: "connecting"}}, true, nil)
+	m := monitor.NewDemo(0)
+	u := New(m)
+	for _, s := range []monitor.Snapshot{{Name: "test", Status: "connecting"}} {
+		u.Update(s)
+	}
 	screen := tcell.NewSimulationScreen("UTF-8")
 	u.app.SetScreen(screen)
 	frames := make(chan string, 20)

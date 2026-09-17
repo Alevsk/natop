@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alevsk/natop/internal/config"
 	"github.com/alevsk/natop/internal/monitor"
 	"github.com/gdamore/tcell/v2"
 )
@@ -30,7 +31,11 @@ func TestLongNamesAreNotTruncatedWhenThereIsRoom(t *testing.T) {
 	snap.Streams[0].Consumers[0].Name = longConsumer
 	snap.Streams[0].Consumers[0].Stream = longStream
 
-	u := New([]monitor.Snapshot{snap}, false, nil)
+	m := monitor.NewManager(config.Config{})
+	u := New(m)
+	for _, s := range []monitor.Snapshot{snap} {
+		u.Update(s)
+	}
 	screen := tcell.NewSimulationScreen("UTF-8")
 	u.app.SetScreen(screen)
 	screen.SetSize(220, 30)
@@ -55,7 +60,11 @@ func TestLongNamesAreNotTruncatedWhenThereIsRoom(t *testing.T) {
 }
 
 func TestNonIdentityColumnsStayCapped(t *testing.T) {
-	u := New([]monitor.Snapshot{sample("prod", 1)}, false, nil)
+	m := monitor.NewManager(config.Config{})
+	u := New(m)
+	for _, s := range []monitor.Snapshot{sample("prod", 1)} {
+		u.Update(s)
+	}
 	if cell := u.table.GetCell(1, 0); cell.MaxWidth != 36 || cell.Expansion != 0 {
 		t.Fatalf("non-identity column lost its cap: MaxWidth=%d Expansion=%d", cell.MaxWidth, cell.Expansion)
 	}

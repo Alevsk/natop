@@ -20,10 +20,10 @@ func (u *UI) showText(title, text string) {
 	v.SetTextColor(foreground)
 	v.SetBorder(true).SetBorderColor(muted).SetTitleColor(accent).SetTitle(" " + safe(title) + " · Esc back ")
 	v.SetText(text)
-	u.overlay = true
+	 
 	u.overlayView = v
-	u.pages.AddPage("overlay", v, true, true)
-	u.app.SetFocus(v)
+	u.openOverlay(v, u.summary)
+	 
 }
 
 func (u *UI) showDetails() {
@@ -247,8 +247,9 @@ func (u *UI) showHelp() {
  [#67e8f9]← → or h l[-]    Scroll horizontally
  [#67e8f9]g / G[-]         First / last row
  [#67e8f9]PgUp / PgDn[-]   Scroll a page
- [#67e8f9]Enter[-]         Open a stream's consumers or selected row's details
+ [#67e8f9]Enter[-]         Open stream's consumers, or view consumer's messages
  [#67e8f9]d[-]             Inspect selected row's full metadata
+ [#67e8f9]m[-]             View pending messages for selected stream or consumer
  [#67e8f9]e[-]             While details are open, export its raw JSON to disk
  [#67e8f9]/[-]             Filter rows; Enter keeps filter, Esc clears it
  [#67e8f9]![-]             Toggle issues-only: hide healthy rows in this view
