@@ -83,7 +83,7 @@ func TestFetchReportsMetadataWithoutChangingConsumer(t *testing.T) {
 	before, _ := consumer.Info(ctx)
 	c := NewClient(config.Connection{Name: "local", URL: s.ClientURL()}, time.Second)
 	defer c.Close()
-	snapshot := c.Fetch(ctx, Snapshot{})
+	snapshot := c.Fetch(ctx, Snapshot{}, true)
 	if snapshot.Error != "" || snapshot.Status != "online" {
 		t.Fatalf("fetch: %+v", snapshot)
 	}
@@ -104,7 +104,7 @@ func TestFetchReportsMetadataWithoutChangingConsumer(t *testing.T) {
 	if err := js.DeleteStream(ctx, "WORK"); err != nil {
 		t.Fatal(err)
 	}
-	empty := c.Fetch(ctx, snapshot)
+	empty := c.Fetch(ctx, snapshot, true)
 	if len(empty.Streams) != 0 || empty.Error != "" {
 		t.Fatalf("successful empty fetch retained old data: %+v", empty)
 	}
@@ -115,13 +115,13 @@ func TestFailedRefreshRetainsStaleData(t *testing.T) {
 	seed(t, s.ClientURL())
 	c := NewClient(config.Connection{Name: "local", URL: s.ClientURL()}, 100*time.Millisecond)
 	defer c.Close()
-	good := c.Fetch(context.Background(), Snapshot{})
+	good := c.Fetch(context.Background(), Snapshot{}, true)
 	if good.Error != "" {
 		t.Fatal(good.Error)
 	}
 	s.Shutdown()
 	s.WaitForShutdown()
-	bad := c.Fetch(context.Background(), good)
+	bad := c.Fetch(context.Background(), good, true)
 	if bad.Error == "" || bad.Status == "online" {
 		t.Fatalf("missing failure: %+v", bad)
 	}
@@ -166,7 +166,7 @@ func TestFetchHandlesManyStreamsConcurrently(t *testing.T) {
 	sort.Strings(names)
 	c := NewClient(config.Connection{Name: "local", URL: s.ClientURL()}, time.Second)
 	defer c.Close()
-	snapshot := c.Fetch(context.Background(), Snapshot{})
+	snapshot := c.Fetch(context.Background(), Snapshot{}, true)
 	if snapshot.Error != "" || snapshot.Status != "online" {
 		t.Fatalf("fetch: %+v", snapshot)
 	}

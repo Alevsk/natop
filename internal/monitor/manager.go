@@ -3,6 +3,7 @@ package monitor
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/alevsk/natop/internal/config"
@@ -10,18 +11,27 @@ import (
 
 // Manager runs one independent worker per configured deployment.
 type Manager struct {
-	config   config.Config
-	requests []chan struct{}
-	done     chan struct{}
-	demo     bool
+	config         config.Config
+	requests       []chan struct{}
+	done           chan struct{}
+	demo           bool
+	needsConsumers atomic.Bool
 }
 
 func NewManager(cfg config.Config) *Manager {
 	m := &Manager{config: cfg, done: make(chan struct{})}
+	// By default, assume we might need consumers (e.g. for --once mode)
+	m.needsConsumers.Store(true)
 	for range cfg.Connections {
 		m.requests = append(m.requests, make(chan struct{}, 1))
 	}
 	return m
+}
+
+func (m *Manager) SetNeedsConsumers(needs bool) {
+	if m.needsConsumers.Swap(needs) != needs {
+		m.Refresh()
+	}
 }
 
 func (m *Manager) IsDemo() bool { return m.demo }
@@ -62,7 +72,7 @@ func (m *Manager) Once(ctx context.Context) []Snapshot {
 			}
 			client := NewClient(connection, 2*time.Second)
 			defer client.Close()
-			snapshots[i] = client.Fetch(ctx, Snapshot{Name: connection.Name, URL: connection.SafeURL(), Status: "connecting"})
+			snapshots[i] = client.Fetch(ctx, Snapshot{Name: connection.Name, URL: connection.SafeURL(), Status: "connecting"}, true)
 		}()
 	}
 	wg.Wait()
@@ -84,7 +94,7 @@ func (m *Manager) Start(ctx context.Context) <-chan Snapshot {
 				if m.demo {
 					previous = demoSnapshot(connection.Name, tick)
 				} else {
-					previous = client.Fetch(ctx, previous)
+					previous = client.Fetch(ctx, previous, m.needsConsumers.Load())
 				}
 				select {
 				case updates <- previous:

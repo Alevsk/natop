@@ -103,7 +103,7 @@ func (c *Client) diagnostic(err error) string {
 
 // Fetch lists metadata only. It never creates or binds a consuming subscription.
 // Failed lists retain the previous data; successful empty lists replace it.
-func (c *Client) Fetch(ctx context.Context, previous Snapshot) Snapshot {
+func (c *Client) Fetch(ctx context.Context, previous Snapshot, needsConsumers bool) Snapshot {
 	result := previous
 	result.Name, result.URL = c.config.Name, c.config.SafeURL()
 	result.Status, result.Error = "offline", ""
@@ -158,6 +158,12 @@ func (c *Client) Fetch(ctx context.Context, previous Snapshot) Snapshot {
 		}
 		stream.Info, stream.Updated, stream.Error = info, time.Now(), ""
 		result.Streams[i] = stream
+
+		if !needsConsumers || info.State.Consumers == 0 {
+			result.Streams[i].Consumers = nil
+			result.Streams[i].ConsumersUpdated = time.Now()
+			continue
+		}
 
 		wg.Add(1)
 		sem <- struct{}{}

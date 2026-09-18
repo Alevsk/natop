@@ -59,6 +59,9 @@ var (
 
 func New(m *monitor.Manager) *UI {
 	u := &UI{app: tview.NewApplication(), snapshots: map[string]monitor.Snapshot{}, demo: m.IsDemo(), refresh: m.Refresh, manager: m}
+	if u.manager != nil {
+		u.manager.SetNeedsConsumers(false)
+	}
 	for _, s := range m.Initial() {
 		u.snapshots[s.Name] = s
 	}
@@ -259,6 +262,9 @@ func (u *UI) changeView(v view) {
 	u.scopeConnection, u.scopeStream = "", ""
 	u.input.SetText("")
 	u.table.ScrollToBeginning().Select(1, 0)
+	if u.manager != nil {
+		u.manager.SetNeedsConsumers(v == consumersView)
+	}
 	u.render()
 }
 
