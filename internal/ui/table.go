@@ -217,7 +217,9 @@ func (u *UI) render() {
 	for _, s := range u.snapshots {
 		totalStreams += len(s.Streams)
 		for _, st := range s.Streams {
-			totalConsumers += len(st.Consumers)
+			if st.Info != nil {
+				totalConsumers += st.Info.State.Consumers
+			}
 		}
 	}
 	u.header.SetText(fmt.Sprintf(" [::b][#67e8f9]natop[-:-:-]  [gray]%s[-]     [green]%d/%d online[-]  [yellow]%d issues[-]\n [#67e8f9]%d[-] Streams   [#67e8f9]%d[-] Consumers   [#67e8f9]%d[-] Connections", mode, online, len(u.snapshots), issues, totalStreams, totalConsumers, len(u.snapshots)))
